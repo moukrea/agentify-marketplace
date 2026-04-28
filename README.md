@@ -7,7 +7,7 @@ A Claude Code marketplace that distributes the **agentify** plugin: a configurab
 ## Install
 
 ```sh
-claude /plugin marketplace add github:moukrea/agentify-marketplace
+claude /plugin marketplace add moukrea/agentify-marketplace
 claude /plugin install agentify@agentify-marketplace
 ```
 

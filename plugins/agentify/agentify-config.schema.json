@@ -60,7 +60,7 @@
       "properties": {
         "url": {
           "type": "string",
-          "description": "Marketplace install URL passed to `claude /plugin marketplace add`. Substituted into {__AGT_MARKETPLACE_URL__}. Examples: 'github:moukrea/agentify-marketplace', 'https://github.com/moukrea/agentify-marketplace', 'https://gitlab.example.com/team/agentify-marketplace'.",
+          "description": "Marketplace install URL passed to `claude /plugin marketplace add`. Substituted into {__AGT_MARKETPLACE_URL__}. Examples: 'moukrea/agentify-marketplace' (bare GitHub owner/repo), 'https://github.com/moukrea/agentify-marketplace' (full URL), 'https://gitlab.example.com/team/agentify-marketplace' (other git host).",
           "format": "uri-reference"
         },
         "name": {
