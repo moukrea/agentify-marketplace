@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "agentify-marketplace",
+  "owner": {
+    "name": "moukrea"
+  },
+  "description": "Marketplace hosting the agentify plugin: a configurable bootstrap that installs a production-grade agentic harness on Claude Code repositories.",
+  "version": "1.0.0",
+  "plugins": [
+    {
+      "name": "agentify",
+      "source": "./plugins/agentify",
+      "description": "Bootstrap a production-grade agentic harness on any Claude Code repository. Configurable via agentify-config.schema.json (company, skill prefix, plugin name, marketplace URL, fleet size, loop path root, ticket prefix). Provides /agt-config, /agt-loop, /agt-upgrade, /agt-self-improve, /agt-feedback skills (prefix configurable per target).",
+      "version": "4.3.0",
+      "category": "scaffolding",
+      "tags": ["agentic-harness", "bootstrap", "ralph-loop", "self-improving"],
+      "license": "MIT",
+      "homepage": "https://github.com/moukrea/agentify-marketplace/tree/main/plugins/agentify"
+    }
+  ]
+}

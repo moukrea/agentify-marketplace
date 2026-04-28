@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+# plugins/agentify/bin/agentify — agentification entry script.
+#
+# Resolves the configuration via lib/resolve_config.sh, then renders
+# the agentify source files (AGENTIFY.md, LOOP_PROMPT.md, REVIEW/
+# REVISE prompts, context bundle) into a target directory with the
+# {__AGT_FIELD__} placeholders substituted to their resolved values.
+#
+# Path resolution: when invoked from the plugin install cache
+# (~/.claude/plugins/cache/.../agentify/<v>/bin/agentify), Claude Code
+# sets ${CLAUDE_PLUGIN_ROOT} to the plugin install dir. When invoked
+# at dev time directly from the marketplace repo
+# (plugins/agentify/bin/agentify), CLAUDE_PLUGIN_ROOT is unset and the
+# script resolves to its own plugins/agentify/ via $(dirname $0)/..
+# Both modes end up cd'd to the directory that contains AGENTIFY.md,
+# LOOP_PROMPT.md, lib/resolve_config.sh, etc.
+#
+# Usage:
+#   plugins/agentify/bin/agentify --company.name=Acme --skills.prefix=ac --output=/tmp/acme-harness/
+#   plugins/agentify/bin/agentify --output=/tmp/test/         # uses defaults
+#
+# Exit 0 on success; non-zero on any error.
+
+set -euo pipefail
+
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+cd "$PLUGIN_ROOT"
+
+# Parse args. Extract --output= and pass everything else to the resolver.
+output=""
+resolver_args=()
+for arg in "$@"; do
+  case "$arg" in
+    --output=*) output="${arg#--output=}" ;;
+    --output)   shift; output="$1" ;;  # NOTE: this loop won't see the shift, kept for clarity
+    *)          resolver_args+=("$arg") ;;
+  esac
+done
+[ -z "$output" ] && { echo "ERROR: --output=<path> is required" >&2; exit 2; }
+
+# Resolve the config.
+AGT_PLUGIN_DEFAULT="${AGT_PLUGIN_DEFAULT:-$PLUGIN_ROOT/agentify.config.default.json}" \
+AGT_PROJECT_CONFIG="${AGT_PROJECT_CONFIG:-/dev/null}" \
+resolved="$(bash "$PLUGIN_ROOT/lib/resolve_config.sh" "${resolver_args[@]}")"
+
+# Pull individual values for substitution (jq -r handles missing as "").
+get() { echo "$resolved" | jq -r "$1 // empty"; }
+
+company_name="$(get '.company.name')"
+company_slug="$(get '.company.name' | tr '[:upper:] ' '[:lower:]-')"
+skill_prefix="$(get '.skills.prefix')"
+plugin_name="$(get '.plugin.name')"
+plugin_namespace="$(get '.plugin.namespace')"
+marketplace_url="$(get '.marketplace.url')"
+marketplace_name="$(get '.marketplace.name')"
+marketplace_host="$(get '.marketplace.host_pattern')"
+marketplace_host_regex="$(get '.marketplace.host_pattern_regex')"
+fleet_size="$(get '.fleet.size_engineers')"
+loop_path_root="$(get '.loop.path_root')"
+ticket_prefix="$(get '.ticket_system.prefix')"
+
+# Derived placeholders.
+if [ -z "$fleet_size" ] || [ "$fleet_size" = "null" ]; then
+  fleet_description="DevOps team"
+  fleet_size_str=""
+else
+  fleet_description="${fleet_size}-engineer DevOps team"
+  fleet_size_str="$fleet_size"
+fi
+if [ -z "$marketplace_host_regex" ] || [ "$marketplace_host_regex" = "null" ]; then
+  marketplace_host_regex="$(echo "$marketplace_host" | sed 's/\./\\\\./g')"
+fi
+# Marketplace repo basename (for context/verification-cookbook.md style references).
+marketplace_repo_basename="$marketplace_name"
+
+# Prepare the output directory.
+mkdir -p "$output"
+
+# Copy the source files into the output, then substitute placeholders.
+# Substitution targets are user-facing scaffolding (AGENTIFY.md, prompts,
+# context bundle, hooks, skills). The schema and the plugin-default
+# config travel with the target as-is (they're meta-documentation, not
+# rendered output). The tests/ directory is intentionally NOT copied
+# into a target — those are agentify-project tests, not target tests.
+copy_list=(
+  "AGENTIFY.md"
+  "LOOP_PROMPT.md"
+  "REVIEW_PROMPT.md"
+  "REVISE_AGENTIFY_PROMPT.md"
+  "agentify-config.schema.json"
+  "agentify.config.default.json"
+)
+for f in "${copy_list[@]}"; do
+  if [ -f "$f" ]; then
+    mkdir -p "$output/$(dirname "$f")"
+    cp "$f" "$output/$f"
+  fi
+done
+# Copy directories with placeholders (context/, lib/).
+# Note: .claude/ and tests/ are intentionally NOT copied — the
+# agentify-project's own dev .claude/ and tests/ live at the marketplace
+# repo root and are not part of the rendered output for a target.
+for d in context lib; do
+  if [ -d "$d" ]; then
+    cp -r "$d" "$output/"
+  fi
+done
+
+# Substitution pass. Order matters when one placeholder is a prefix of
+# another (longest first). All substitutions are literal — perl's
+# \Q...\E quoting handles regex special chars in the placeholder, and
+# we use ENV-passed values to avoid shell-escaping headaches with
+# values that contain '/', '"', or '$'. The schema and plugin-default
+# config are excluded from substitution because their `description`
+# fields document the placeholders themselves (otherwise the docs
+# would lose meaning).
+sub() {
+  local placeholder="$1" value="$2"
+  # Pass placeholder + value via env so perl receives them literally,
+  # without shell interpretation surprises.
+  export AGT_SUB_PLACEHOLDER="$placeholder"
+  export AGT_SUB_VALUE="$value"
+  find "$output" -type f \( -name '*.md' -o -name '*.json' -o -name '*.sh' \) \
+       ! -name 'agentify-config.schema.json' \
+       ! -name 'agentify.config.default.json' \
+       -print0 \
+    | xargs -0 perl -i -pe '
+        BEGIN { $p = $ENV{AGT_SUB_PLACEHOLDER}; $v = $ENV{AGT_SUB_VALUE}; }
+        s/\Q$p\E/$v/g;
+      ' 2>/dev/null || true
+  unset AGT_SUB_PLACEHOLDER AGT_SUB_VALUE
+}
+
+sub '{__AGT_MARKETPLACE_URL__}'         "$marketplace_url"
+sub '{__AGT_MARKETPLACE_HOST_REGEX__}'  "$marketplace_host_regex"
+sub '{__AGT_MARKETPLACE_HOST__}'        "$marketplace_host"
+sub '{__AGT_MARKETPLACE_NAME__}'        "$marketplace_name"
+sub '{__AGT_MARKETPLACE_REPO__}'        "$marketplace_repo_basename"
+sub '{__AGT_PLUGIN_NAMESPACE__}'        "$plugin_namespace"
+sub '{__AGT_PLUGIN_NAME__}'             "$plugin_name"
+sub '{__AGT_FLEET_DESCRIPTION__}'       "$fleet_description"
+sub '{__AGT_FLEET_SIZE__}'              "$fleet_size_str"
+sub '{__AGT_COMPANY_NAME__}'            "$company_name"
+sub '{__AGT_COMPANY_SLUG__}'            "$company_slug"
+sub '{__AGT_SKILL_PREFIX__}'            "$skill_prefix"
+sub '{__AGT_LOOP_PATH_ROOT__}'          "$loop_path_root"
+sub '{__AGT_TICKET_PREFIX__}'           "$ticket_prefix"
+
+# If loop_path_root differs from the default (.agents-work), also rewrite
+# the .agents-work literal references that intentionally weren't
+# parameterized in the source (they're cheap to substitute and resolve
+# the WS-B-007 design choice). Schema and plugin-default config are
+# excluded since they document the default value itself.
+if [ "$loop_path_root" != ".agents-work" ]; then
+  export AGT_SUB_LPR="$loop_path_root"
+  find "$output" -type f \( -name '*.md' -o -name '*.json' -o -name '*.sh' \) \
+       ! -name 'agentify-config.schema.json' \
+       ! -name 'agentify.config.default.json' \
+       -print0 \
+    | xargs -0 perl -i -pe '
+        BEGIN { $v = $ENV{AGT_SUB_LPR}; }
+        s/\.agents-work/$v/g;
+      ' 2>/dev/null || true
+  unset AGT_SUB_LPR
+fi
+
+# Write a marker so /agt-upgrade (WS-D) and detection logic can detect
+# that this directory is an agentified target and at what version.
+agentify_version=$(grep -oE '\(v[0-9]+\.[0-9]+\)' "$output/AGENTIFY.md" | head -1 | tr -d '()')
+mkdir -p "$output/$loop_path_root"
+echo "${agentify_version:-unknown}" > "$output/$loop_path_root/AGENTIFY_VERSION"
+
+# Emit a one-line summary.
+echo "agentify: rendered to $output"
+echo "  company=$company_name skill_prefix=$skill_prefix plugin=$plugin_name"
+echo "  loop.path_root=$loop_path_root version=${agentify_version:-unknown}"

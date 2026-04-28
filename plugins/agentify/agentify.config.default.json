@@ -1,0 +1,29 @@
+{
+  "company": {
+    "name": "agentify project"
+  },
+  "skills": {
+    "prefix": "agt"
+  },
+  "plugin": {
+    "name": "agentify",
+    "namespace": "agentify"
+  },
+  "marketplace": {
+    "name": "agentify-marketplace",
+    "url": "https://github.com/moukrea/agentify-marketplace"
+  },
+  "fleet": {
+    "size_engineers": null
+  },
+  "loop": {
+    "path_root": ".agents-work"
+  },
+  "ticket_system": {
+    "prefix": "TICKET-"
+  },
+  "feedback": {
+    "upstream_repo": "moukrea/agentify-marketplace",
+    "anonymize_company": false
+  }
+}

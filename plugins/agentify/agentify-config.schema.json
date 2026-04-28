@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/moukrea/agentify-marketplace/blob/main/agentify-config.schema.json",
+  "title": "agentify-config",
+  "description": "Configuration schema for the agentify Claude Code plugin. Drives the parameter substitutions performed at agentification time (placeholders of the form {__AGT_FIELD__} in AGENTIFY.md, hooks, prompts, and templates) and the runtime behavior of the plugin's slash commands. Resolved by lib/resolve_config.sh in the precedence order: skill args > project-root agentify.config.json > plugin-install agentify.config.default.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["company", "skills"],
+  "properties": {
+    "company": {
+      "type": "object",
+      "description": "Identity of the team or organization the harness is being agentified for. Used in soft-framing prose (AGENTS.md, REVIEW/REVISE prompts) and in any branding-bearing template output.",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Display name (e.g., 'Acme', 'agentify project'). Substituted into {__AGT_COMPANY_NAME__}.",
+          "minLength": 1,
+          "maxLength": 80
+        }
+      }
+    },
+    "skills": {
+      "type": "object",
+      "description": "Skill (slash command) namespace conventions. The prefix is the per-target shorthand for distinguishing the agentified skills from upstream Claude Code natives.",
+      "additionalProperties": false,
+      "required": ["prefix"],
+      "properties": {
+        "prefix": {
+          "type": "string",
+          "description": "Lowercase 2-6 character prefix (e.g., 'agt', 'ac', 'eg'). Substituted into {__AGT_SKILL_PREFIX__}; produces slash commands like /<prefix>-loop, /<prefix>-config.",
+          "pattern": "^[a-z][a-z0-9]{1,5}$"
+        }
+      }
+    },
+    "plugin": {
+      "type": "object",
+      "description": "Plugin packaging metadata. Drives marketplace.json and plugin.json fields.",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Plugin name as registered in the marketplace. Substituted into {__AGT_PLUGIN_NAME__}.",
+          "default": "agentify",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Plugin namespace (e.g., 'agentify-marketplace:agentify' yields slash commands like /agentify:agt-loop). Substituted into {__AGT_PLUGIN_NAMESPACE__}.",
+          "default": "agentify",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        }
+      }
+    },
+    "marketplace": {
+      "type": "object",
+      "description": "Where the plugin is published and (optionally) which Git host pattern is allowed for managed-settings hostPattern guards.",
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "Marketplace install URL passed to `claude /plugin marketplace add`. Substituted into {__AGT_MARKETPLACE_URL__}. Examples: 'github:moukrea/agentify-marketplace', 'https://github.com/moukrea/agentify-marketplace', 'https://gitlab.example.com/team/agentify-marketplace'.",
+          "format": "uri-reference"
+        },
+        "name": {
+          "type": "string",
+          "description": "Local-alias name for the marketplace, used after `marketplace add` (e.g., 'agentify-marketplace'). Substituted into {__AGT_MARKETPLACE_NAME__}.",
+          "default": "agentify-marketplace",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        },
+        "host_pattern": {
+          "type": "string",
+          "description": "Optional regex used by managed-settings.json's hostPattern guard. Restricts the plugin to only activate on repos whose remote URL matches. Substituted into {__AGT_MARKETPLACE_HOST__}. Example: '^https://github\\.com/' or '^https://gitlab\\.acme\\.local/'.",
+          "format": "regex"
+        },
+        "host_pattern_regex": {
+          "type": "string",
+          "description": "JSON-escaped variant of `host_pattern` for embedding inside JSON-quoted strings (e.g., the managed-settings.json hostPattern field where `.` must be `\\\\.`). Substituted into {__AGT_MARKETPLACE_HOST_REGEX__}. resolve_config.sh derives this from `host_pattern` automatically when not set explicitly.",
+          "default": null
+        }
+      }
+    },
+    "ticket_system": {
+      "type": "object",
+      "description": "Ticket-tracker conventions for example references in AGENTIFY.md (e.g., 'see PROJ-9876 for the regression'). Optional; substituted only into example/illustrative text, never into operational code paths.",
+      "additionalProperties": false,
+      "properties": {
+        "prefix": {
+          "type": "string",
+          "description": "Ticket-ID prefix for the company's tracker (e.g., 'JIRA-', 'PROJ-', 'TASK-'). Substituted into {__AGT_TICKET_PREFIX__}.",
+          "default": "TICKET-",
+          "pattern": "^[A-Z][A-Z0-9]{0,9}-?$"
+        }
+      }
+    },
+    "feedback": {
+      "type": "object",
+      "description": "Feedback channel configuration. Drives /agt-feedback (WS-G-002) destination and /agt-self-improve (WS-F) ingestion source via lib/feedback_ingest.sh (WS-G-004).",
+      "additionalProperties": false,
+      "properties": {
+        "upstream_repo": {
+          "type": "string",
+          "description": "GitHub <owner>/<name> where /agt-feedback files issues. Defaults at runtime to the owner/name parsed from marketplace.url when not set explicitly. Example: 'moukrea/agentify-marketplace'.",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,38}/[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"
+        },
+        "anonymize_company": {
+          "type": "boolean",
+          "description": "If true, /agt-feedback substitutes 'private' for company.name in the issue body's Target repo profile section. Engineers can still override per-submission.",
+          "default": false
+        }
+      }
+    },
+    "fleet": {
+      "type": "object",
+      "description": "Fleet-context soft-framing for REVIEW/REVISE prompt templates. Optional; omitted if size is unknown.",
+      "additionalProperties": false,
+      "properties": {
+        "size_engineers": {
+          "type": ["integer", "null"],
+          "description": "Headcount of the engineering team this harness is sized for. Substituted into {__AGT_FLEET_SIZE__}; if null, the prompt template falls back to 'the fleet'.",
+          "default": null,
+          "minimum": 1,
+          "maximum": 100000
+        }
+      }
+    },
+    "loop": {
+      "type": "object",
+      "description": "Loop-runtime configuration: where the harness writes its state, revisions, reviews, session summary.",
+      "additionalProperties": false,
+      "properties": {
+        "path_root": {
+          "type": "string",
+          "description": "Directory (relative to repo root) where loop state is written. Substituted into {__AGT_LOOP_PATH_ROOT__}; flows into LOOP_PROMPT.md's state_root parameter, hooks' ${CLAUDE_PROJECT_DIR}/<path_root>/* paths, and the AGENTS.md template.",
+          "default": ".agents-work",
+          "pattern": "^\\.?[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$"
+        }
+      }
+    }
+  }
+}

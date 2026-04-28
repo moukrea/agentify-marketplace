@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "agentify",
+  "version": "4.3.0",
+  "description": "Bootstrap a production-grade agentic harness on any Claude Code repository. Configurable per target via agentify.config.json (company, skill prefix, plugin name, marketplace URL, fleet size, loop path root, ticket prefix).",
+  "author": {
+    "name": "moukrea",
+    "url": "https://github.com/moukrea"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/moukrea/agentify-marketplace/tree/main/plugins/agentify",
+  "repository": "https://github.com/moukrea/agentify-marketplace",
+  "keywords": [
+    "agentic-harness",
+    "bootstrap",
+    "ralph-loop",
+    "self-improving",
+    "scaffolding",
+    "claude-code",
+    "configurable"
+  ]
+}

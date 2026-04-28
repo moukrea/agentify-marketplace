@@ -1,0 +1,27 @@
+{
+  "_comment": "Self-agentification config: this is the agentify project agentified by its own plugin. Per WS-E-002 of epic/PLAN.md. Used by bin/agentify when --output=. (re-render in place) and by /agt-config show / /agt-loop / etc. when invoked from within this repo. Distinct from agentify.config.default.json (which is the plugin-install default seed for new targets).",
+  "company": {
+    "name": "agentify project"
+  },
+  "skills": {
+    "prefix": "agt"
+  },
+  "plugin": {
+    "name": "agentify",
+    "namespace": "agentify"
+  },
+  "marketplace": {
+    "name": "agentify-marketplace",
+    "url": "https://github.com/moukrea/agentify-marketplace",
+    "host_pattern": "github.com"
+  },
+  "fleet": {
+    "size_engineers": null
+  },
+  "loop": {
+    "path_root": ".agents-work"
+  },
+  "ticket_system": {
+    "prefix": "TICKET-"
+  }
+}

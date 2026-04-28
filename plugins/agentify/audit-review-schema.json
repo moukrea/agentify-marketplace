@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/moukrea/agentify-marketplace/blob/main/plugins/agentify/audit-review-schema.json",
+  "title": "agentify-audit-review",
+  "description": "Schema for the structured-review file produced by /agt-self-improve. Designed as a strict superset of the JSON contract REVIEW_PROMPT.md emits (verdict, headline counts, severity-bucketed findings, references) so REVISE_AGENTIFY_PROMPT.md can consume audit output without changes — provided the synthetic-review marker (per WS-F-003) is recognized and gates apply behind a mandatory human-review step. Mandatory: every finding has at least one URL citation fetched in the audit run AND a falsifiable acceptance criterion.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "audit_id",
+    "produced_at",
+    "produced_by",
+    "synthetic_source",
+    "verdict",
+    "headline_counts",
+    "findings"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Audit-review schema version. Bumped on breaking change."
+    },
+    "audit_id": {
+      "type": "string",
+      "description": "Unique identifier for this audit run (typically an ISO timestamp like '2026-04-28T15:00:00Z' or a UUID).",
+      "minLength": 1
+    },
+    "produced_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when the audit completed."
+    },
+    "produced_by": {
+      "type": "object",
+      "required": ["skill", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "skill": {
+          "type": "string",
+          "const": "agt-self-improve",
+          "description": "Producer skill name. Must be 'agt-self-improve' (configurable per the WS-F-002 SKILL.md if other auditors emerge)."
+        },
+        "version": {
+          "type": "string",
+          "description": "agentify version at the time of the audit (e.g., 'v4.2'). Used to date-stamp findings against the relevant feature set."
+        },
+        "model": {
+          "type": "string",
+          "description": "Optional Claude model identifier that ran the audit (e.g., 'claude-opus-4-7')."
+        }
+      }
+    },
+    "synthetic_source": {
+      "type": "string",
+      "const": "self-improve",
+      "description": "Marker identifying this review as machine-produced rather than human-authored. Mirrors the HTML comment '<!-- agentify-synthetic-review-source: self-improve -->' that REVISE_AGENTIFY_PROMPT.md (WS-F-003) recognizes. Constraining to 'self-improve' means /agt-feedback-derived findings (WS-G) get a different synthetic_source value if they ever travel through this schema."
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["ship", "iterate", "park", "stalled", "regression", "failure"],
+      "description": "Aggregate verdict. Mirrors the LOOP_PROMPT.md REVIEW JSON contract."
+    },
+    "headline_counts": {
+      "type": "object",
+      "required": ["critical", "major", "moderate", "strategic", "polish"],
+      "additionalProperties": false,
+      "properties": {
+        "critical":  {"type": "integer", "minimum": 0, "description": "Count of critical findings (would block ship)."},
+        "major":     {"type": "integer", "minimum": 0, "description": "Count of major findings (significant; should fix soon)."},
+        "moderate":  {"type": "integer", "minimum": 0, "description": "Count of moderate findings (worth attention this iteration)."},
+        "strategic": {"type": "integer", "minimum": 0, "description": "Count of strategic findings (cross-cutting; may span releases)."},
+        "polish":    {"type": "integer", "minimum": 0, "description": "Count of polish findings (low-risk improvements)."}
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "Per-finding records. Each finding MUST cite at least one URL (web-fetched in the audit run) and provide a falsifiable acceptance criterion (otherwise REVISE cannot reliably apply or verify).",
+      "minItems": 0,
+      "items": {
+        "type": "object",
+        "required": ["id", "severity", "title", "description", "references", "acceptance_criterion"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Z]+-[0-9]+$",
+            "description": "Stable finding ID (e.g., 'AUDIT-001'). Severity prefix optional ('CRIT-001', 'MAJ-001'). The /agt-self-improve skill assigns these per audit run."
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "major", "moderate", "strategic", "polish"],
+            "description": "Mirrors the LOOP_PROMPT.md REVIEW severity buckets."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "One-line summary."
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Full prose. Should explain (a) what's currently wrong/stale/missing in agentify, (b) what the cited source(s) say has changed, (c) why this matters."
+          },
+          "references": {
+            "type": "array",
+            "description": "URLs the audit fetched and that support the finding. At least one required. Each MUST have been web-fetched in this audit run (not invented from training data) — the audit must be able to attest to having read each URL.",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["url", "title", "fetched_at"],
+              "additionalProperties": false,
+              "properties": {
+                "url":        {"type": "string", "format": "uri"},
+                "title":      {"type": "string", "minLength": 1},
+                "fetched_at": {"type": "string", "format": "date-time"},
+                "snippet":    {"type": "string", "description": "Optional: relevant excerpt from the fetched content (≤ 500 chars)."}
+              }
+            }
+          },
+          "acceptance_criterion": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Falsifiable criterion the next REVISE iteration must satisfy to close this finding. Should be a runnable command, a grep pattern, a file existence check, or similar — not 'feels right'. REVIEW (next iteration) verifies via this criterion. Examples: 'grep -q new-feature-name AGENTIFY.md', 'test -f hooks/new-hook.sh', 'jq -e .new_field agentify-config.schema.json'."
+          },
+          "caused_by_prior_revise": {
+            "type": "boolean",
+            "default": false,
+            "description": "True if this finding is a regression introduced by a recent REVISE pass (vs. a pre-existing or external-source-driven issue). Used by LOOP_PROMPT.md §C7 REGRESSION exit condition."
+          },
+          "feedback_issue_id": {
+            "type": ["string", "null"],
+            "default": null,
+            "description": "Optional: when this finding originates from /agt-feedback ingestion (WS-G), the source GitHub issue ID. null for pure online-research findings."
+          }
+        }
+      }
+    },
+    "audit_inputs": {
+      "type": "object",
+      "description": "Optional metadata about what the audit consumed. Useful for triage and reproducibility.",
+      "additionalProperties": false,
+      "properties": {
+        "context_bundle_files": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Paths to context/*.md files re-checked for staleness."
+        },
+        "stale_threshold_days": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Threshold (in days) above which 'Last verified' entries are flagged for re-check."
+        },
+        "feedback_issues_consulted": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of open agentify-feedback GitHub issues consulted via lib/feedback_ingest.sh (WS-G-004)."
+        },
+        "external_sources_fetched": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of distinct external URLs fetched (Claude Code docs, GitHub issues, Anthropic blog, etc.)."
+        }
+      }
+    }
+  }
+}
