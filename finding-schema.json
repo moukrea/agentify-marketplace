@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/moukrea/agentify-marketplace/blob/main/finding-schema.json",
+  "title": "agentify-finding",
+  "description": "Strict superset of plugins/agentify/audit-review-schema.json. Used by every audit producer in the marketplace (mkt-self-improve, mkt-feedback-triage, mkt-practice-evolve, mkt-audit-trend, feedback-ingest) as well as the existing target-side /<p>-self-improve. Every finding still requires (a) at least one fetched URL reference, (b) a falsifiable acceptance criterion, and (c) the WS-F-003 synthetic-source marker when machine-produced.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "audit_id",
+    "produced_at",
+    "produced_by",
+    "synthetic_source",
+    "verdict",
+    "headline_counts",
+    "findings"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 2,
+      "description": "finding-schema.json version. Bumped on breaking change. v1 was audit-review-schema.json (kept for backward compatibility); v2 widens producer set."
+    },
+    "audit_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique identifier for this audit run (typically ISO timestamp or UUID)."
+    },
+    "produced_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "produced_by": {
+      "type": "object",
+      "required": ["skill", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "skill": {
+          "type": "string",
+          "enum": [
+            "agt-self-improve",
+            "mkt-self-improve",
+            "mkt-practice-evolve",
+            "mkt-feedback-triage",
+            "mkt-audit-trend",
+            "feedback-ingest",
+            "human"
+          ]
+        },
+        "version": { "type": "string" },
+        "model": { "type": "string" }
+      }
+    },
+    "synthetic_source": {
+      "type": "string",
+      "enum": [
+        "human",
+        "feedback-ingest",
+        "self-improve",
+        "mkt-self-improve",
+        "mkt-practice-evolve",
+        "mkt-feedback-triage"
+      ],
+      "description": "WS-F-003: marks the authorship class. Synthetic sources require human-review gate per REVISE_AGENTIFY_PROMPT.md before applying."
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["healthy", "degraded", "broken"]
+    },
+    "headline_counts": {
+      "type": "object",
+      "required": ["critical", "major", "moderate", "polish", "info"],
+      "additionalProperties": false,
+      "properties": {
+        "critical":  { "type": "integer", "minimum": 0 },
+        "major":     { "type": "integer", "minimum": 0 },
+        "moderate":  { "type": "integer", "minimum": 0 },
+        "polish":    { "type": "integer", "minimum": 0 },
+        "info":      { "type": "integer", "minimum": 0 }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "severity", "category", "title", "acceptance_criterion", "references"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "major", "moderate", "polish", "info"]
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "bug",
+              "regression",
+              "doc-gap",
+              "schema-violation",
+              "ci-broken",
+              "manifest-drift",
+              "governance-gap",
+              "practice-drift",
+              "feedback-recurring",
+              "feature",
+              "meta"
+            ]
+          },
+          "title": { "type": "string", "minLength": 1 },
+          "details": { "type": "string" },
+          "acceptance_criterion": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A falsifiable check — a grep, a CI job, a script — that proves the finding is resolved."
+          },
+          "references": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["url", "fetched_at"],
+              "properties": {
+                "url": { "type": "string", "format": "uri" },
+                "fetched_at": { "type": "string", "format": "date-time" },
+                "note": { "type": "string" }
+              }
+            }
+          },
+          "adoption_check_command": {
+            "type": "string",
+            "description": "Optional one-line shell predicate (exit 0 = adopted, 1 = not_adopted, 2 = partial). Used by /mkt-practice-evolve to track recommendation adoption."
+          },
+          "source_quote": { "type": "string" },
+          "linked_pr": { "type": "string" },
+          "linked_adr": { "type": "string" }
+        }
+      }
+    }
+  }
+}

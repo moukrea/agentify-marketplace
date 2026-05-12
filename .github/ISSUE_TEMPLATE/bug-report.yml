@@ -1,0 +1,69 @@
+name: Bug report
+description: Report a defect in the agentify plugin or marketplace.
+title: "[bug] "
+labels: ["agentify-feedback", "bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the bug report. Please fill every section.
+        `/mkt-feedback-triage` reads these forms automatically and applies
+        labels; well-formed reports are triaged in days, not weeks.
+  - type: input
+    id: plugin_version
+    attributes:
+      label: Plugin version
+      description: Output of `jq -r .version plugins/agentify/.claude-plugin/plugin.json` in your scaffolded repo (or "marketplace" if filing against this repo).
+      placeholder: "4.3.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - critical
+        - major
+        - moderate
+        - polish
+        - info
+      default: 2
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Exact commands a maintainer can run to observe the defect.
+      render: bash
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Include stderr/stdout snippets verbatim.
+    validations:
+      required: true
+  - type: input
+    id: feedback_id
+    attributes:
+      label: agentify-feedback-id
+      description: If filed via `/<p>-feedback`, paste the UUID footer here. Leave empty otherwise.
+      placeholder: "(optional)"
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        OS:       Ubuntu 24.04
+        Shell:    bash 5.2
+        Claude Code: latest
+    validations:
+      required: false

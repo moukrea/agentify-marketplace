@@ -1,0 +1,40 @@
+name: feedback-triage
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"  # every 6h
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  triage:
+    name: Triage open agentify-feedback issues
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install jq + gh (gh is pre-installed on ubuntu-24.04)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends jq
+
+      - name: Ingest feedback (parsed JSON to stdout for log inspection)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          bash plugins/agentify/lib/feedback_ingest.sh moukrea/agentify-marketplace \
+            | jq -r '
+              "Open issues with agentify-feedback label:",
+              (.[] | "- #" + (.github_issue_number | tostring) + " — " + .title + " [" + .status + ", " + .severity + "]")
+            '
+
+      # The interactive classification + label apply runs from a maintainer
+      # session (claude /mkt-feedback-triage). This workflow is currently
+      # informational only — it surfaces the ingest output as a workflow log
+      # so maintainers see triage backlog without opening the dashboard.
+      # A future iteration will run claude headlessly here once the
+      # Claude Code Action lands a stable entry point.

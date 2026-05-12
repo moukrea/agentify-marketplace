@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Marketplace question or discussion
+    url: https://github.com/moukrea/agentify-marketplace/discussions
+    about: Open a discussion for ideas, questions, and design conversations not tied to a concrete issue.
+  - name: /agt-feedback (from a scaffolded target)
+    url: https://github.com/moukrea/agentify-marketplace/blob/main/plugins/agentify/skills/agt-feedback/SKILL.md
+    about: If you are running agentify in a scaffolded repo, prefer /<prefix>-feedback — it pre-fills context the maintainer needs.
