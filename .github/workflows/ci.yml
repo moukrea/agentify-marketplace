@@ -162,3 +162,39 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends jq
           bash bin/test-de-spec-smoke.sh
+
+  migration-gate:
+    name: Migration gate
+    runs-on: ubuntu-24.04
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-migration-needed') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate every migration document in the tree
+        run: |
+          set -euo pipefail
+          bash bin/validate-migration.sh plugins/agentify/migrations
+
+      - name: Require a paired migration when plugin.json version bumps
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          old=$(git show "origin/$BASE_REF:plugins/agentify/.claude-plugin/plugin.json" 2>/dev/null \
+                  | jq -r .version) || old=""
+          new=$(jq -r .version plugins/agentify/.claude-plugin/plugin.json)
+          if [ -z "$old" ] || [ "$old" = "$new" ]; then
+            echo "no version bump; migration-gate not required"
+            exit 0
+          fi
+          f="plugins/agentify/migrations/v${old}-to-v${new}.md"
+          if [ ! -f "$f" ]; then
+            echo "::error::plugin version $old → $new but missing migration doc $f"
+            echo "Apply label 'no-migration-needed' on the PR if this is intentional."
+            exit 1
+          fi
+          bash bin/validate-migration.sh "$f"
