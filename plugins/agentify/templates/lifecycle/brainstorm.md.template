@@ -1,0 +1,21 @@
+# Brainstorm: {{feature_title}}
+
+## Problem statement
+<one paragraph>
+
+## Alternatives considered
+| # | Alternative | Pros | Cons | Score (1-5) |
+|---|-------------|------|------|-------------|
+| 1 | <…> | <…> | <…> | <n> |
+| 2 | <…> | <…> | <…> | <n> |
+| 3 | <…> | <…> | <…> | <n> |
+
+## Open questions
+- [ ] <…>
+- [ ] <…>
+
+## Inputs / references
+- <link to ADR / audit-finding / external article>
+
+## Tentative direction
+<one paragraph that converges into the next phase's PRD>

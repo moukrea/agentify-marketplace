@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/moukrea/agentify-marketplace/blob/main/plugins/agentify/task-schema.json",
+  "title": "agentify-task",
+  "description": "Logical shape of a single task within a plan's tasks artifact. Drivers map this onto Sub-tasks (Jira), checklist items (Notion), issues (Linear), or bullets in tasks.md (markdown).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "validation"],
+  "properties": {
+    "id":            { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "title":         { "type": "string", "minLength": 1 },
+    "body":          { "type": "string" },
+    "validation":    {
+      "type": "string",
+      "minLength": 1,
+      "description": "Falsifiable signal — a shell command, test command, HTTP response, audit finding closure, etc. The lifecycle-conformance CI gate enforces presence; the /<prefix>-prd skill enforces non-vague wording."
+    },
+    "state": {
+      "type": "string",
+      "enum": ["draft", "ready", "in_progress", "blocked", "in_review", "done", "cancelled"]
+    },
+    "depends_on":    {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Optional list of task ids this task depends on. Used by /<prefix>-implement when parallelism > 1."
+    },
+    "phase":         { "type": "integer", "minimum": 1, "maximum": 5 },
+    "backend_ref":   { "type": "string" }
+  }
+}

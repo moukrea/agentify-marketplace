@@ -1,0 +1,23 @@
+---
+prd_id: {{prd_id}}
+plan_ref: {{plan_backend_ref}}
+---
+
+# Plan: {{title}}
+
+## Architecture summary
+<short prose: how this PRD will be implemented at a high level>
+
+## Files / modules to create / modify
+- {{path}} — <purpose>
+- {{path}} — <purpose>
+
+## External dependencies introduced
+- <package@version, MCP server, REST API>
+
+## Risks & mitigations
+- Risk: <…>  → Mitigation: <falsifiable signal>
+
+## Verification plan
+- <test commands and observable signals — exactly what /<prefix>-implement
+  will run to confirm success>

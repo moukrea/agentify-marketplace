@@ -16,12 +16,26 @@
 #
 # Refs are POSIX paths relative to the repo root.
 
-# Resolve <path_root>.
+# Resolve <path_root>. Precedence:
+#   1. task_backend.path_root in agentify.config.json (lifecycle-specific)
+#   2. loop.path_root in agentify.config.json (loop-working-dir; the
+#      marketplace separates these because its lifecycle artifacts live
+#      at repo root while loop work lives under .agents-work/)
+#   3. "." (repo root)
 markdown__path_root() {
 	local cfg=./agentify.config.json
 	if [ -f "$cfg" ]; then
-		jq -r '.loop.path_root // "."' "$cfg" 2>/dev/null
-		return
+		local p
+		p=$(jq -r '.task_backend.path_root // empty' "$cfg" 2>/dev/null)
+		if [ -n "$p" ]; then
+			printf '%s\n' "$p"
+			return
+		fi
+		p=$(jq -r '.loop.path_root // empty' "$cfg" 2>/dev/null)
+		if [ -n "$p" ]; then
+			printf '%s\n' "$p"
+			return
+		fi
 	fi
 	printf '.\n'
 }

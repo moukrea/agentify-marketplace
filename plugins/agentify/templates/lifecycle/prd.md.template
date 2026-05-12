@@ -1,0 +1,28 @@
+---
+prd_id: {{prd_id}}
+title: {{title}}
+state: draft
+backend_ref: {{backend_ref}}
+created_at: {{timestamp}}
+last_updated_at: {{timestamp}}
+---
+
+# PRD: {{title}}
+
+## User stories
+1. As a <role>, I want <capability> so that <outcome>.
+
+## Functional requirements
+- FR-1: <…>
+- FR-2: <…>
+
+## Non-functional requirements
+- NFR-1: <…>
+
+## Out of scope
+- <…>
+
+## Acceptance criteria
+<every criterion must be falsifiable — a real check a human or CI can run>
+- AC-1: <…>
+- AC-2: <…>

@@ -1,0 +1,31 @@
+# {{project_name}} Charter
+
+## Mission
+<one paragraph: what this project exists to do, for whom, and why now>
+
+## Principles
+- Principle 1: <…>
+- Principle 2: <…>
+- Principle 3: <…>
+
+## Constraints
+- Performance budget: <…>
+- Security posture: <…>
+- Compatibility window: <…>
+
+## Lifecycle expectations
+- Brainstorm precedes PRD.
+- PRD precedes plan.
+- Plan precedes tasks.
+- Tasks: ≤5 phases × ≤7 tasks/phase; every task carries a falsifiable
+  validation criterion; every phase ends with a checkpoint.
+
+## Harness layers in use
+- Task backend: {{task_backend_driver}}
+- Git host: {{git_host_driver}}
+- Secrets provider: {{secrets_provider}}
+- Fleet discovery providers: {{fleet_discovery_provider_list}}
+
+## Practice currency (auto-updated by /<prefix>-self-improve practice phase)
+- AGENTS.md: tracked v{{agents_md_version}} (last verified {{date}})
+- Tracked sources: see plugins/agentify/conventions/sources.yaml

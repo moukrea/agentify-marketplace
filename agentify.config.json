@@ -21,6 +21,10 @@
   "loop": {
     "path_root": ".agents-work"
   },
+  "task_backend": {
+    "driver": "markdown",
+    "path_root": "."
+  },
   "ticket_system": {
     "prefix": "TICKET-"
   }

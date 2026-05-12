@@ -45,6 +45,41 @@
       "name": "agt-upgrade",
       "description": "Plan and apply migrations between agentify plugin versions, with rollback.",
       "skill": "./skills/agt-upgrade/SKILL.md"
+    },
+    {
+      "name": "agt-charter",
+      "description": "Lifecycle phase 0 — set or amend the project charter (mission, principles, constraints, lifecycle expectations). Routes through lib/task_backend.sh so markdown/Jira/Notion/Linear backends are interchangeable.",
+      "skill": "./skills/agt-charter/SKILL.md"
+    },
+    {
+      "name": "agt-brainstorm",
+      "description": "Lifecycle phase 1 — open-ended exploration before a PRD exists. Captures alternatives, tradeoffs, open questions, tentative direction.",
+      "skill": "./skills/agt-brainstorm/SKILL.md"
+    },
+    {
+      "name": "agt-prd",
+      "description": "Lifecycle phase 2 — promote a brainstorm to a Product Requirements Document with falsifiable acceptance criteria.",
+      "skill": "./skills/agt-prd/SKILL.md"
+    },
+    {
+      "name": "agt-clarify",
+      "description": "Lifecycle phase 3 — interactive sequential clarification of underspecified PRD areas with a logged Q&A trail.",
+      "skill": "./skills/agt-clarify/SKILL.md"
+    },
+    {
+      "name": "agt-plan",
+      "description": "Lifecycle phase 4 — translate an approved PRD into a technical implementation plan (files, dependencies, risks, verification).",
+      "skill": "./skills/agt-plan/SKILL.md"
+    },
+    {
+      "name": "agt-tasks",
+      "description": "Lifecycle phase 5 — decompose an approved plan into ordered tasks under the ≤5×7 + falsifiable-Validation + per-phase-Checkpoint discipline.",
+      "skill": "./skills/agt-tasks/SKILL.md"
+    },
+    {
+      "name": "agt-implement",
+      "description": "Lifecycle phase 6 — execute the tasks of a plan in order, delegating each to /agt-loop and updating task state through the task-backend.",
+      "skill": "./skills/agt-implement/SKILL.md"
     }
   ]
 }
