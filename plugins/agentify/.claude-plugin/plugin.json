@@ -80,6 +80,16 @@
       "name": "agt-implement",
       "description": "Lifecycle phase 6 — execute the tasks of a plan in order, delegating each to /agt-loop and updating task state through the task-backend.",
       "skill": "./skills/agt-implement/SKILL.md"
+    },
+    {
+      "name": "agt-decide",
+      "description": "Draft a target-scope ADR using recurring findings from <path_root>/audits/ as motivation. Mirrors /mkt-decide for target repos.",
+      "skill": "./skills/agt-decide/SKILL.md"
+    },
+    {
+      "name": "agt-fleet-discover",
+      "description": "Identify peer agentified repos via configured discovery providers; write <path_root>/related-repos.json; prompt /mkt-fleet-bootstrap when ≥2 peers found.",
+      "skill": "./skills/agt-fleet-discover/SKILL.md"
     }
   ]
 }
