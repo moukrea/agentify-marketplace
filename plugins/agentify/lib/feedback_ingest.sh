@@ -78,9 +78,13 @@ if [ -z "${raw:-}" ]; then
     exit 2
   fi
 
-  # gh dependency check.
-  if ! command -v gh >/dev/null 2>&1; then
-    echo "WARN: gh CLI not found; emitting empty list" >&2
+  # Driver dependency check (git_host abstraction). For the github driver this
+  # collapses to a gh-availability check; for other drivers it's whatever the
+  # driver requires. When unavailable, emit empty so /agt-self-improve still
+  # runs (per WS-G-005 graceful-degradation).
+  GIT_HOST_LIB="${GIT_HOST_LIB:-$(dirname "${BASH_SOURCE[0]}")/git_host.sh}"
+  if ! command -v gh >/dev/null 2>&1 && ! command -v glab >/dev/null 2>&1; then
+    echo "WARN: no git-host CLI (gh/glab) found; emitting empty list" >&2
     echo '[]'
     exit 0
   fi
@@ -109,14 +113,12 @@ parse_feedback_id_from_body() {
 
 # If we don't have raw from a fixture, pull all issues with the
 # agentify-feedback label (any state — we need closed-with-addressed/
-# wontfix for status mapping). gh returns a JSON array.
+# wontfix for status mapping). Routes through git_host so it works on
+# whatever host the marketplace lives on (GitHub today, GitLab tomorrow).
 if [ -z "${raw:-}" ]; then
-  raw=$(gh issue list \
-    --repo "$upstream" \
-    --label agentify-feedback \
-    --state all \
-    --limit 100 \
-    --json number,title,labels,body,createdAt,updatedAt,state,url 2>/dev/null \
+  # shellcheck source=git_host.sh
+  . "$GIT_HOST_LIB"
+  raw=$(AGT_GIT_HOST_REPO="$upstream" git_host issue_list all agentify-feedback 2>/dev/null \
     || echo '[]')
 fi
 
