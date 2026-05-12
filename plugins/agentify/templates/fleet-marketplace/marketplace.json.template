@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "{__FLEET_NAME__}-marketplace",
+  "owner": {
+    "name": "{__FLEET_OWNER__}"
+  },
+  "description": "Internal fleet marketplace for {__FLEET_GROUP__}. Hosts fleet-specific plugins and conventions shared across the peer repos listed in fleet/peers.json. Bootstrapped from agentify-marketplace.",
+  "version": "0.1.0",
+  "repository": "{__FLEET_REPO_URL__}",
+  "license": "MIT",
+  "plugins": [
+    {
+      "name": "{__FLEET_NAME__}-shared",
+      "source": "./plugins/{__FLEET_NAME__}-shared",
+      "description": "Shared {__FLEET_GROUP__} conventions, skills, and hooks.",
+      "version": "0.1.0",
+      "category": "fleet",
+      "tags": ["agentify-fleet", "{__FLEET_NAME__}"],
+      "license": "MIT"
+    }
+  ]
+}

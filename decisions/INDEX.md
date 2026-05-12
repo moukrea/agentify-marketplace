@@ -15,7 +15,7 @@ durable commitments.
 | 0005  | secret-provider layer                      | accepted | 2026-05-12 |
 | 0006  | peer-discovery multi-provider              | accepted | 2026-05-12 |
 | 0007  | agentify-native lifecycle (no third-party) | accepted | 2026-05-12 |
-| 0008  | fleet marketplace bootstrap                | proposed | 2026-05-12 |
+| 0008  | fleet marketplace bootstrap                | accepted | 2026-05-12 |
 | 0009  | marketplace self-dogfooding                | accepted | 2026-05-12 |
 
 ## Authoring

@@ -1,0 +1,25 @@
+# AGENTS.md — {__FLEET_NAME__}-marketplace
+
+Fleet-scope agent instructions. **Inherits** from upstream
+agentify-marketplace's [AGENTS.md]({__PARENT_MARKETPLACE_URL__}/blob/main/AGENTS.md);
+this file documents the differences.
+
+## Fleet-specific conventions
+
+- Skill prefix: `{__FLEET_NAME__}` (e.g., `/{__FLEET_NAME__}-deploy`).
+- Ticket prefix: `{__FLEET_TICKET_PREFIX__}` (configurable per peer).
+- Group name: `{__FLEET_GROUP__}` — used by
+  `/<prefix>-fleet-discover` to recognise peers.
+
+## What is in-scope for this marketplace
+
+- Plugins shared by the peer repos listed in `fleet/peers.json`.
+- ADRs that bind fleet members (e.g., choice of secret provider,
+  choice of CI runner topology, fleet-specific MCP routing).
+
+## What is out-of-scope
+
+- General-purpose agentic-harness primitives — those belong upstream
+  in agentify-marketplace.
+- Repo-specific decisions — those belong in each peer's own
+  `<path_root>/adrs/`.
