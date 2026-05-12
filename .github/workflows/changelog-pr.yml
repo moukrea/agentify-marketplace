@@ -1,0 +1,47 @@
+name: changelog-pr
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    name: Refresh [Unreleased] in CHANGELOG.md
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install jq
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends jq
+
+      - name: Regenerate
+        run: bash bin/gen-changelog.sh || true
+
+      - name: Open PR if CHANGELOG diff is non-empty
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet CHANGELOG.md plugins/agentify/BREAKING_CHANGES.md 2>/dev/null; then
+            echo "no changelog diff; nothing to PR"
+            exit 0
+          fi
+          branch="bot/changelog-$(date -u +%Y-%m-%d)"
+          git config user.name  "agentify-bot"
+          git config user.email "bot@agentify-marketplace"
+          git switch -c "$branch"
+          git add CHANGELOG.md plugins/agentify/BREAKING_CHANGES.md 2>/dev/null || true
+          git commit -m "chore(changelog): refresh [Unreleased] from conventional commits"
+          git push -u origin "$branch"
+          bash plugins/agentify/lib/git_host.sh pr_create \
+            "chore(changelog): refresh [Unreleased]" \
+            <(printf 'Automated [Unreleased] regen by changelog-pr.yml.\nReview before /mkt-release tags a version.\n') \
+            main "$branch"

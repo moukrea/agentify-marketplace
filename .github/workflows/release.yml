@@ -1,0 +1,51 @@
+name: release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish GitHub release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install jq
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends jq
+
+      - name: Derive previous tag + version
+        id: ver
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF#refs/tags/}"
+          prev=$(git describe --tags --abbrev=0 "${tag}^" 2>/dev/null || echo "")
+          echo "tag=$tag" >>"$GITHUB_OUTPUT"
+          echo "prev=$prev" >>"$GITHUB_OUTPUT"
+
+      - name: Generate release notes
+        env:
+          PREV: ${{ steps.ver.outputs.prev }}
+        run: |
+          set -euo pipefail
+          if [ -n "$PREV" ]; then
+            bash bin/gen-changelog.sh --print --since "$PREV" >release_notes.md
+          else
+            bash bin/gen-changelog.sh --print >release_notes.md
+          fi
+
+      - name: Publish via git_host abstraction
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -euo pipefail
+          bash plugins/agentify/lib/git_host.sh release_create \
+            "$TAG" "agentify $TAG" release_notes.md
