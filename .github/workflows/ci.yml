@@ -1,0 +1,164 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (shell + JSON + schemas)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck and shfmt
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends shellcheck
+          curl -sSLo /usr/local/bin/shfmt \
+            https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_amd64
+          sudo chmod +x /usr/local/bin/shfmt
+
+      - name: shellcheck
+        run: |
+          set -euo pipefail
+          # Source the .shellcheckrc by running from repo root.
+          # Lint every tracked .sh file plus hook scripts.
+          mapfile -t files < <(git ls-files '*.sh' 'hooks/*.sh' '**/hooks/*.sh' 'bin/*' 'plugins/**/bin/*' 'plugins/**/hooks/*' \
+            | xargs -I{} bash -c 'file -b --mime-type "{}" 2>/dev/null | grep -q "x-shellscript" && echo "{}"' || true)
+          if [ "${#files[@]}" -eq 0 ]; then
+            # Fallback: just lint by extension.
+            mapfile -t files < <(git ls-files '*.sh')
+          fi
+          printf 'Linting:\n%s\n' "${files[@]}"
+          shellcheck "${files[@]}"
+
+      - name: shfmt (diff)
+        run: |
+          set -euo pipefail
+          shfmt -d -i 0 -ci -sr $(git ls-files '*.sh') || {
+            echo "::error::shfmt found formatting differences. Run: shfmt -w -i 0 -ci -sr <file>"
+            exit 1
+          }
+
+      - name: JSON syntax
+        run: |
+          set -euo pipefail
+          fail=0
+          while IFS= read -r f; do
+            jq empty "$f" || { echo "::error file=$f::invalid JSON"; fail=1; }
+          done < <(git ls-files '*.json')
+          exit "$fail"
+
+      - name: JSON-Schema validation (schemas themselves)
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet jsonschema
+          for s in $(git ls-files '*-schema.json'); do
+            python3 -c "import json,sys; json.load(open('$s'))" \
+              && echo "$s parses ok" \
+              || { echo "::error file=$s::schema parse failed"; exit 1; }
+          done
+
+  manifest-conformance:
+    name: Manifest conformance
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bats + jq
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bats jq
+
+      - name: Run manifest-conformance tests
+        run: bats tests/manifest-conformance.bats
+
+  bats:
+    name: Bats tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bats + jq
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bats jq
+
+      - name: Run all bats tests
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          tests=(tests/*.bats)
+          if [ "${#tests[@]}" -eq 0 ]; then
+            echo "no bats tests found"
+            exit 0
+          fi
+          bats "${tests[@]}"
+
+  smoke-bootstrap:
+    name: Smoke — bootstrap
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends jq
+          bash bin/test-bootstrap-smoke.sh
+
+  smoke-plugin-install:
+    name: Smoke — plugin install
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends jq
+          bash bin/test-plugin-install-smoke.sh
+
+  smoke-self-improve:
+    name: Smoke — self-improve
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends jq
+          bash bin/test-self-improve-smoke.sh
+
+  smoke-self-loop:
+    name: Smoke — self-loop
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends jq
+          bash bin/test-self-loop-smoke.sh
+
+  smoke-de-spec:
+    name: Smoke — de-spec
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends jq
+          bash bin/test-de-spec-smoke.sh
