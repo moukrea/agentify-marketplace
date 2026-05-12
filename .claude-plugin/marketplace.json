@@ -6,6 +6,8 @@
   },
   "description": "Marketplace hosting the agentify plugin: a configurable bootstrap that installs a production-grade agentic harness on Claude Code repositories.",
   "version": "1.0.0",
+  "repository": "https://github.com/moukrea/agentify-marketplace",
+  "license": "MIT",
   "plugins": [
     {
       "name": "agentify",

@@ -1,0 +1,13 @@
+# Shared shellcheck configuration for agentify-marketplace.
+# See https://www.shellcheck.net/wiki/Directive for option details.
+
+# SC1091: "Not following: file was not specified" — many lib files are sourced
+# dynamically with paths resolved at runtime via CLAUDE_PLUGIN_ROOT.
+disable=SC1091
+
+# SC2155: "Declare and assign separately" — acceptable in bash where the
+# assignment cannot fail and we want a single line for readability.
+disable=SC2155
+
+# Default shell dialect.
+shell=bash

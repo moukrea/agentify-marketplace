@@ -18,5 +18,33 @@
     "scaffolding",
     "claude-code",
     "configurable"
+  ],
+  "hooks": "./hooks/hooks.json",
+  "commands": [
+    {
+      "name": "agentify",
+      "description": "Bootstrap a target Claude Code repository with the agentify harness (rendering, config, hooks, skills).",
+      "skill": "./skills/agentify/SKILL.md"
+    },
+    {
+      "name": "agt-config",
+      "description": "Inspect and edit agentify.config.json with schema validation.",
+      "skill": "./skills/agt-config/SKILL.md"
+    },
+    {
+      "name": "agt-feedback",
+      "description": "File community feedback against the agentify marketplace upstream.",
+      "skill": "./skills/agt-feedback/SKILL.md"
+    },
+    {
+      "name": "agt-self-improve",
+      "description": "Audit the target (or marketplace, when run here) and emit a finding-schema-conformant audit document.",
+      "skill": "./skills/agt-self-improve/SKILL.md"
+    },
+    {
+      "name": "agt-upgrade",
+      "description": "Plan and apply migrations between agentify plugin versions, with rollback.",
+      "skill": "./skills/agt-upgrade/SKILL.md"
+    }
   ]
 }
