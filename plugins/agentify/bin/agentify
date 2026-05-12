@@ -58,6 +58,12 @@ marketplace_host_regex="$(get '.marketplace.host_pattern_regex')"
 fleet_size="$(get '.fleet.size_engineers')"
 loop_path_root="$(get '.loop.path_root')"
 ticket_prefix="$(get '.ticket_system.prefix')"
+profile="$(get '.profile')"
+[ -z "$profile" ] && profile="standard"
+case "$profile" in
+  minimal|standard|full) ;;
+  *) echo "agentify: unknown profile '$profile' (need minimal|standard|full); defaulting to standard" >&2; profile="standard" ;;
+esac
 
 # Derived placeholders.
 if [ -z "$fleet_size" ] || [ "$fleet_size" = "null" ]; then
@@ -105,6 +111,80 @@ for d in context lib; do
     cp -r "$d" "$output/"
   fi
 done
+
+# Profile-gated pruning. Drivers / providers / extra libraries beyond
+# the selected profile's slice are removed after the wholesale copy
+# above. Keeps the dispatcher (e.g., secrets.sh, git_host.sh) in every
+# profile so callers' code paths don't break — only the driver files
+# differ.
+apply_profile_filter() {
+  local prof="$1" lib_dir="$output/lib"
+  [ -d "$lib_dir" ] || return 0
+
+  # Per-profile keep lists (everything else under the named subdir is
+  # pruned). The "always-keep" libs (resolve_config, detect_version,
+  # feedback_ingest, conventional-commit support) are not enumerated
+  # here — they're never pruned.
+  local keep_secrets keep_git_host keep_task keep_fleet
+  case "$prof" in
+    minimal)
+      keep_secrets=(env.sh)
+      keep_git_host=(github.sh)
+      keep_task=()                  # no lifecycle support in minimal
+      keep_fleet=()                 # no fleet discovery in minimal
+      # Also drop lifecycle/practice/audit helpers entirely.
+      rm -f "$lib_dir/task_backend.sh" "$lib_dir/fleet_discover.sh" \
+            "$lib_dir/practice_track.sh" "$lib_dir/audit_aggregate.sh" 2>/dev/null || true
+      rm -rf "$lib_dir/task_backend_drivers" "$lib_dir/fleet_discover_providers" \
+             "$lib_dir/practice_track_drivers" 2>/dev/null || true
+      ;;
+    standard)
+      keep_secrets=(env.sh opaq.sh)
+      keep_git_host=(github.sh)
+      keep_task=(markdown.sh file.sh)
+      keep_fleet=(file.sh github-org.sh gitlab-group.sh)
+      ;;
+    full)
+      # Keep everything.
+      return 0
+      ;;
+  esac
+
+  prune_dir() {
+    local dir="$1"; shift
+    local keep=("$@")
+    [ -d "$dir" ] || return 0
+    local keep_re=""
+    if [ "${#keep[@]}" -gt 0 ]; then
+      keep_re="$(printf '%s\n' "${keep[@]}")"
+    fi
+    find "$dir" -maxdepth 1 -mindepth 1 -type f -name '*.sh' -print0 \
+      | xargs -0 -I{} bash -c '
+          f="$0"; keep_list="$1"
+          name="$(basename "$f")"
+          if [ -z "$keep_list" ] || ! grep -qx "$name" <<<"$keep_list"; then
+            rm -f -- "$f"
+          fi
+        ' {} "$keep_re"
+  }
+
+  prune_dir "$lib_dir/secrets_providers"           "${keep_secrets[@]}"
+  prune_dir "$lib_dir/git_host_drivers"            "${keep_git_host[@]}"
+  prune_dir "$lib_dir/task_backend_drivers"        "${keep_task[@]}"
+  prune_dir "$lib_dir/fleet_discover_providers"    "${keep_fleet[@]}"
+
+  # Browser scripts dir (under task_backend_drivers/browser/) only ships
+  # in `full`; remove it in minimal/standard.
+  if [ "$prof" != "full" ]; then
+    rm -rf "$lib_dir/task_backend_drivers/browser" \
+           "$lib_dir/fleet_discover_providers/browser" 2>/dev/null || true
+  fi
+}
+apply_profile_filter "$profile"
+
+# Record the chosen profile so /<prefix>-upgrade and /<prefix>-self-improve
+# can verify the install matches the declared profile.
+printf '%s\n' "$profile" >"$output/.agentify-profile"
 
 # Substitution pass. Order matters when one placeholder is a prefix of
 # another (longest first). All substitutions are literal — perl's
@@ -172,5 +252,5 @@ echo "${agentify_version:-unknown}" > "$output/$loop_path_root/AGENTIFY_VERSION"
 
 # Emit a one-line summary.
 echo "agentify: rendered to $output"
-echo "  company=$company_name skill_prefix=$skill_prefix plugin=$plugin_name"
+echo "  company=$company_name skill_prefix=$skill_prefix plugin=$plugin_name profile=$profile"
 echo "  loop.path_root=$loop_path_root version=${agentify_version:-unknown}"
