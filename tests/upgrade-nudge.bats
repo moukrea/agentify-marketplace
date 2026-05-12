@@ -79,7 +79,7 @@ EOF
 @test "nudge: fires when installed is one minor behind (auto)" {
 	make_config auto
 	make_fake_git_host "1.1.0"
-	run bash "$HOOK" 2>&1
+	run bash -c "bash '$HOOK' 2>&1"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"installed v1.0.0"* ]]
 	[[ "$output" == *"latest v1.1.0"* ]]
@@ -88,7 +88,7 @@ EOF
 @test "nudge: fires when installed is one major behind (auto)" {
 	make_config auto
 	make_fake_git_host "2.0.0"
-	run bash "$HOOK" 2>&1
+	run bash -c "bash '$HOOK' 2>&1"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"latest v2.0.0"* ]]
 }
@@ -96,7 +96,7 @@ EOF
 @test "nudge: always strategy fires even when up to date" {
 	make_config always
 	make_fake_git_host "1.0.0"
-	run bash "$HOOK" 2>&1
+	run bash -c "bash '$HOOK' 2>&1"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"installed v1.0.0"* ]]
 }
@@ -107,7 +107,7 @@ EOF
 	bash "$HOOK" 2>/dev/null  # populate cache
 	# Now break the git_host driver — cache should still produce the nudge.
 	make_fake_git_host ""
-	run bash "$HOOK" 2>&1
+	run bash -c "bash '$HOOK' 2>&1"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"latest v1.1.0"* ]]
 }

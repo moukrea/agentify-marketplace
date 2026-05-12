@@ -33,7 +33,6 @@ FOOTER_MARKER='<!-- agentify-migration-template-version: 1 -->'
 
 err() {
 	printf 'validate-migration: %s\n' "$*" >&2
-	return 1
 }
 
 validate_one() {
@@ -63,7 +62,7 @@ validate_one() {
 	local section
 	for section in "${REQUIRED_H2[@]}"; do
 		local lineno
-		lineno=$(grep -n -F -m1 "$section" "$f" | cut -d: -f1 || true)
+		lineno=$(grep -n -F -m1 -- "$section" "$f" | cut -d: -f1 || true)
 		if [ -z "$lineno" ]; then
 			err "$f: missing required section: $section"
 			return 1
@@ -76,7 +75,7 @@ validate_one() {
 	done
 
 	# Footer marker.
-	if ! grep -Fq "$FOOTER_MARKER" "$f"; then
+	if ! grep -Fq -- "$FOOTER_MARKER" "$f"; then
 		err "$f: missing footer marker '$FOOTER_MARKER'"
 		return 1
 	fi
@@ -111,7 +110,6 @@ validate_dir() {
 	done
 
 	# Every index row points at an existing file.
-	local missing
 	while IFS= read -r ref; do
 		[ -z "$ref" ] && continue
 		[ -f "$dir/$ref" ] || {

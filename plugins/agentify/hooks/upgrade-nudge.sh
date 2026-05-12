@@ -96,15 +96,24 @@ auto | *)
 	;;
 esac
 
+nudge_msg=""
+if [ "$should_nudge" -eq 1 ]; then
+	nudge_msg="agentify plugin: installed v${installed} → latest v${latest}. Run /<prefix>-upgrade plan to review the migration."
+fi
+
 mkdir -p "$(dirname "$cache_file")"
 {
 	printf 'installed=%s\n' "$installed"
 	printf 'latest=%s\n' "$latest"
-	if [ "$should_nudge" -eq 1 ]; then
-		nudge_msg="agentify plugin: installed v${installed} → latest v${latest}. Run /<prefix>-upgrade plan to review the migration."
+	if [ -n "$nudge_msg" ]; then
 		printf 'nudge=%s\n' "$nudge_msg"
-		printf '%s\n' "$nudge_msg" >&2
 	fi
 } >"$cache_file" 2>/dev/null || true
+
+# Emit the nudge line OUTSIDE the cache-write block so the outer >"$cache_file"
+# redirection does not swallow it.
+if [ -n "$nudge_msg" ]; then
+	printf '%s\n' "$nudge_msg" >&2
+fi
 
 exit 0
