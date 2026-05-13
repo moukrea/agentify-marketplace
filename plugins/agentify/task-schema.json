@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/moukrea/agentify-marketplace/blob/main/plugins/agentify/task-schema.json",
+  "$id": "https://raw.githubusercontent.com/moukrea/agentify-marketplace/main/plugins/agentify/task-schema.json",
   "title": "agentify-task",
   "description": "Logical shape of a single task within a plan's tasks artifact. Drivers map this onto Sub-tasks (Jira), checklist items (Notion), issues (Linear), or bullets in tasks.md (markdown).",
   "type": "object",

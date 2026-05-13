@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/moukrea/agentify-marketplace/blob/main/agentify-config.schema.json",
+  "$id": "https://raw.githubusercontent.com/moukrea/agentify-marketplace/main/plugins/agentify/agentify-config.schema.json",
   "title": "agentify-config",
   "description": "Configuration schema for the agentify Claude Code plugin. Drives the parameter substitutions performed at agentification time (placeholders of the form {__AGT_FIELD__} in AGENTIFY.md, hooks, prompts, and templates) and the runtime behavior of the plugin's slash commands. Resolved by lib/resolve_config.sh in the precedence order: skill args > project-root agentify.config.json > plugin-install agentify.config.default.json.",
   "type": "object",

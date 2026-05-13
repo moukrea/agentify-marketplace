@@ -27,5 +27,6 @@
   },
   "ticket_system": {
     "prefix": "TICKET-"
-  }
+  },
+  "profile": "standard"
 }

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/moukrea/agentify-marketplace/blob/main/plugins/agentify/prd-schema.json",
+  "$id": "https://raw.githubusercontent.com/moukrea/agentify-marketplace/main/plugins/agentify/prd-schema.json",
   "title": "agentify-prd",
   "description": "Logical shape of a PRD. The markdown task-backend driver encodes this as YAML front-matter + H2 sections; non-markdown drivers map fields onto backend objects (Jira Epic fields, Notion DB columns, Linear project fields).",
   "type": "object",

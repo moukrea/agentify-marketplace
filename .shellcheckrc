@@ -3,11 +3,15 @@
 
 # SC1091: "Not following: file was not specified" — many lib files are sourced
 # dynamically with paths resolved at runtime via CLAUDE_PLUGIN_ROOT.
+# Keeping the global disable is acceptable because the alternative (per-file
+# disables on every sourced lib) is high-noise with no signal.
 disable=SC1091
 
-# SC2155: "Declare and assign separately" — acceptable in bash where the
-# assignment cannot fail and we want a single line for readability.
-disable=SC2155
+# Note: SC2155 ("Declare and assign separately") was previously disabled
+# globally. C16 removed that disable — the rule catches real bugs where
+# `local x=$(cmd)` masks $cmd's exit code under set -e. Per-file disables
+# are added at the small number of call sites where the exit code genuinely
+# doesn't matter (e.g. printf-only assignments).
 
 # Default shell dialect.
 shell=bash

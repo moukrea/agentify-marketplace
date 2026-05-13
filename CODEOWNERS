@@ -12,6 +12,11 @@
 /bin/                              @moukrea
 
 # Schemas and contracts.
-/plugins/agentify/agentify-config.schema.json   @moukrea
-/plugins/agentify/audit-review-schema.json      @moukrea
-/finding-schema.json                            @moukrea
+/plugins/agentify/agentify-config.schema.json             @moukrea
+/plugins/agentify/audit-review-schema.json                @moukrea
+/finding-schema.json                                      @moukrea
+/plugins/agentify/prd-schema.json                         @moukrea
+/plugins/agentify/task-schema.json                        @moukrea
+/plugins/agentify/related-repos.schema.json               @moukrea
+/plugins/agentify/conventions/pinned-practices.schema.json @moukrea
+/plugins/agentify/prds/INDEX.schema.json                  @moukrea

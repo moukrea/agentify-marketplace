@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/moukrea/agentify-marketplace/blob/main/plugins/agentify/audit-review-schema.json",
+  "$id": "https://raw.githubusercontent.com/moukrea/agentify-marketplace/main/plugins/agentify/audit-review-schema.json",
   "title": "agentify-audit-review",
   "description": "Schema for the structured-review file produced by /agt-self-improve. Designed as a strict superset of the JSON contract REVIEW_PROMPT.md emits (verdict, headline counts, severity-bucketed findings, references) so REVISE_AGENTIFY_PROMPT.md can consume audit output without changes — provided the synthetic-review marker (per WS-F-003) is recognized and gates apply behind a mandatory human-review step. Mandatory: every finding has at least one URL citation fetched in the audit run AND a falsifiable acceptance criterion.",
   "type": "object",
