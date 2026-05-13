@@ -46,3 +46,21 @@ example.
 cancelled` — exported by `task_backend.sh` as `AGT_TASK_STATES`. Each
 driver maps to/from its backend's native states via
 `task_backend.state_mapping`. Captured in ADR 0004.
+
+## Deferred
+
+| Question | Reason | Revisit |
+|----------|--------|---------|
+| _none yet — every question raised during PRD authoring has a resolution above._ | — | — |
+
+## Notes
+
+Methodology for clarification cycles (per the `agt-clarify` skill):
+
+1. New questions raised during PRD authoring land here first under a
+   per-cycle date heading.
+2. Resolutions move the entry from the cycle heading to `## Resolved`.
+3. Unresolved questions that should NOT block PRD readiness move to
+   `## Deferred` and are dual-written into `prd.md ## Open Questions`.
+4. Each new cycle gets its own `## YYYY-MM-DD` heading; reviews are
+   scheduled in `tasks.md`.

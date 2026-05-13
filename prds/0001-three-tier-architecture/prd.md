@@ -101,3 +101,11 @@ last_updated_at: 2026-05-12T00:00:00Z
 - AC-10: All bats suites pass: manifest-conformance, secrets-env,
   git-host-dispatch, migration-gate, upgrade-nudge,
   task-backend-markdown, config-resolution.
+
+## Open Questions
+
+_none — all initial clarifications resolved in [`clarifications.md`](clarifications.md)._
+
+Per the `agt-clarify` dual-write rule (ADR 0007), any new
+unresolved clarification raised after the PRD enters `ready` state
+mirrors into this section in addition to `clarifications.md ## Deferred`.
