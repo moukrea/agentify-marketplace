@@ -29,15 +29,28 @@ gitea__parse_repo() {
 }
 
 gitea__api() {
+	# H1+H2 fix: write the Authorization header to a mktemp config file
+	# (chmod 600) and pass via curl `-K` rather than `-H` on argv. Use
+	# --fail-with-body so 4xx/5xx responses surface the API error body
+	# (curl --fail alone drops the body and emits opaque exit-22).
 	local method="$1"; shift
 	local path="$1"; shift
 	local endpoint; endpoint=$(gitea__endpoint)
-	local auth=()
+	local cfg=""
 	if [ -n "${GITEA_TOKEN:-}" ]; then
-		auth=(-H "Authorization: token ${GITEA_TOKEN}")
+		cfg=$(mktemp)
+		chmod 600 "$cfg"
+		printf 'header = "Authorization: token %s"\n' "$GITEA_TOKEN" >"$cfg"
+		# shellcheck disable=SC2064  # expand $cfg now
+		trap "rm -f \"$cfg\"" RETURN
 	fi
-	curl -sS --fail --max-time 30 -X "$method" "${auth[@]}" \
-		-H "Content-Type: application/json" "${endpoint}/${path}" "$@"
+	if [ -n "$cfg" ]; then
+		curl -sS --fail-with-body --max-time 30 -K "$cfg" -X "$method" \
+			-H "Content-Type: application/json" "${endpoint}/${path}" "$@"
+	else
+		curl -sS --fail-with-body --max-time 30 -X "$method" \
+			-H "Content-Type: application/json" "${endpoint}/${path}" "$@"
+	fi
 }
 
 git_host_issue_create() {
@@ -46,13 +59,13 @@ git_host_issue_create() {
 	[ -z "$title" ] || [ -z "$body_file" ] && {
 		echo "gitea issue_create: need title and body-file" >&2; return 64
 	}
-	local body; body=$(jq -Rs . <"$body_file")
 	local labels="[]"
 	if [ "${#REST[@]}" -gt 2 ]; then
 		labels=$(printf '%s\n' "${REST[@]:2}" | jq -R . | jq -s .)
 	fi
-	jq -n --arg title "$title" --arg body "$body" --argjson labels "$labels" \
-		'{title: $title, body: ($body | fromjson), labels: $labels}' \
+	# H3 fix: --rawfile, not jq -Rs . | fromjson round-trip.
+	jq -n --arg title "$title" --rawfile body "$body_file" --argjson labels "$labels" \
+		'{title: $title, body: $body, labels: $labels}' \
 		| gitea__api POST "repos/${REPO_FLAG}/issues" -d @-
 }
 
@@ -132,9 +145,8 @@ git_host_pr_create() {
 	[ -z "$title" ] || [ -z "$body_file" ] || [ -z "$head" ] && {
 		echo "gitea pr_create: need title, body-file, head" >&2; return 64
 	}
-	local body; body=$(jq -Rs . <"$body_file")
-	jq -n --arg t "$title" --arg b "$body" --arg base "$base" --arg head "$head" \
-		'{title: $t, body: ($b | fromjson), base: $base, head: $head}' \
+	jq -n --arg t "$title" --rawfile b "$body_file" --arg base "$base" --arg head "$head" \
+		'{title: $t, body: $b, base: $base, head: $head}' \
 		| gitea__api POST "repos/${REPO_FLAG}/pulls" -d @-
 }
 
@@ -175,14 +187,21 @@ git_host_repo_create() {
 }
 
 git_host_ci_status() {
+	# H4 fix: gitea's statuses endpoint doesn't return the commit SHA on
+	# each status object — the prior code mapped .target_url (a CI run
+	# URL) into the cross-driver `headSha` field, breaking any consumer
+	# that compares SHAs (correlate run with commit). Resolve the SHA
+	# once from the commit endpoint and inject it on every status row.
 	gitea__parse_repo "$@"
 	local ref="${REST[0]:-HEAD}" limit="${REST[1]:-10}"
+	local sha
+	sha=$(gitea__api GET "repos/${REPO_FLAG}/commits/${ref}" 2>/dev/null | jq -r '.sha // ""')
 	gitea__api GET "repos/${REPO_FLAG}/commits/${ref}/statuses?limit=${limit}" 2>/dev/null \
-		| jq '
+		| jq --arg sha "$sha" '
 			[.[] | {
 				status: .state,
 				conclusion: .state,
-				headSha: .target_url,
+				headSha: $sha,
 				event: .context,
 				name: .context,
 				createdAt: .created_at,

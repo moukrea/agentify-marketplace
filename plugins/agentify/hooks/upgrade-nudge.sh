@@ -75,12 +75,38 @@ latest=$(printf '%s' "$latest_manifest_raw" | jq -r '.version' 2>/dev/null || ec
 [ -z "$latest" ] && exit 0
 
 # Compare MINORs. Strategy "always" always prints.
-inst_major=${installed%%.*}
-inst_rest=${installed#*.}
+# H5 fix: strip a leading `v` from either side (a maintainer who tags
+# `v4.4.0` and forgets to drop the `v` from plugin.json:.version would
+# otherwise crash this hook with `[ "v4" -gt "4" ]` integer-comparison
+# error on every downstream SessionStart). Reject anything that doesn't
+# match `^[0-9]+\.[0-9]+` after stripping — pre-release suffixes
+# (`-rc1`) and single-component versions should not throw arithmetic
+# errors; silently skip the nudge instead.
+_strip_v() { local v="${1#v}"; printf '%s' "$v"; }
+_valid_semver_min() { [[ "$1" =~ ^[0-9]+\.[0-9]+(\..*|$) ]]; }
+
+installed_norm=$(_strip_v "$installed")
+latest_norm=$(_strip_v "$latest")
+if ! _valid_semver_min "$installed_norm" || ! _valid_semver_min "$latest_norm"; then
+	# Can't compare; bail quietly (the cache write below is skipped via exit 0).
+	exit 0
+fi
+
+inst_major=${installed_norm%%.*}
+inst_rest=${installed_norm#*.}
 inst_minor=${inst_rest%%.*}
-lat_major=${latest%%.*}
-lat_rest=${latest#*.}
+# Strip any pre-release tail off the minor segment (so 3-rc1 -> 3).
+inst_minor=${inst_minor%%[!0-9]*}
+lat_major=${latest_norm%%.*}
+lat_rest=${latest_norm#*.}
 lat_minor=${lat_rest%%.*}
+lat_minor=${lat_minor%%[!0-9]*}
+
+# Defensive: if the trim leaves an empty string, treat as 0.
+inst_major=${inst_major:-0}
+inst_minor=${inst_minor:-0}
+lat_major=${lat_major:-0}
+lat_minor=${lat_minor:-0}
 
 should_nudge=0
 case "$strategy" in

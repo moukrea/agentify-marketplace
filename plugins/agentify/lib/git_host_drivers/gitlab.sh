@@ -36,17 +36,33 @@ gitlab__url_encode() {
 }
 
 # Run a REST call. $1 = method, $2 = path (relative to api/v4), stdin = body JSON.
+# H1+H2 fix: pass the auth token via curl's `-K` config-file form rather
+# than `-H` on argv (which lands in `ps` / /proc/<pid>/cmdline on shared
+# hosts). The config file is created with `mktemp` + chmod 600 and is
+# always cleaned up via an EXIT trap. `--fail-with-body` (curl ≥7.76)
+# preserves the API error body on 4xx/5xx so callers see WHY a request
+# failed; bare `--fail` discards the body and emits an opaque exit-22.
 gitlab__api() {
 	local method="$1"; shift
 	local path="$1"; shift
 	local endpoint; endpoint=$(gitlab__endpoint)
-	local auth=()
+	local cfg=""
 	if [ -n "${GITLAB_TOKEN:-}" ]; then
-		auth=(-H "PRIVATE-TOKEN: ${GITLAB_TOKEN}")
+		cfg=$(mktemp)
+		chmod 600 "$cfg"
+		printf 'header = "PRIVATE-TOKEN: %s"\n' "$GITLAB_TOKEN" >"$cfg"
+		# shellcheck disable=SC2064  # expand $cfg now, not at trap-time
+		trap "rm -f \"$cfg\"" RETURN
 	fi
-	curl -sS --fail --max-time 30 -X "$method" "${auth[@]}" \
-		-H "Content-Type: application/json" \
-		"${endpoint}/${path}" "$@"
+	if [ -n "$cfg" ]; then
+		curl -sS --fail-with-body --max-time 30 -K "$cfg" -X "$method" \
+			-H "Content-Type: application/json" \
+			"${endpoint}/${path}" "$@"
+	else
+		curl -sS --fail-with-body --max-time 30 -X "$method" \
+			-H "Content-Type: application/json" \
+			"${endpoint}/${path}" "$@"
+	fi
 }
 
 git_host_issue_create() {
@@ -56,14 +72,17 @@ git_host_issue_create() {
 		echo "gitlab issue_create: need title and body-file" >&2; return 64
 	}
 	local project; project=$(gitlab__url_encode "$REPO_FLAG")
-	local body; body=$(jq -Rs . <"$body_file")
 	local labels=""
 	if [ "${#REST[@]}" -gt 2 ]; then
 		labels="$(printf '%s,' "${REST[@]:2}")"
 		labels="${labels%,}"
 	fi
-	jq -n --arg title "$title" --arg body "$body" --arg labels "$labels" \
-		'{title: $title, description: ($body | fromjson), labels: $labels}' \
+	# H3 fix: use --rawfile so the body content reaches jq as a string
+	# without going through `jq -Rs . | fromjson` round-trip (which fails
+	# on NUL bytes and differs subtly across jq versions). Matches the
+	# pattern used by release_create below.
+	jq -n --arg title "$title" --rawfile body "$body_file" --arg labels "$labels" \
+		'{title: $title, description: $body, labels: $labels}' \
 		| gitlab__api POST "projects/${project}/issues" -d @-
 }
 
@@ -146,9 +165,9 @@ git_host_pr_create() {
 		echo "gitlab pr_create: need title, body-file, head" >&2; return 64
 	}
 	local project; project=$(gitlab__url_encode "$REPO_FLAG")
-	local desc; desc=$(jq -Rs . <"$body_file")
-	jq -n --arg t "$title" --arg d "$desc" --arg b "$base" --arg h "$head" \
-		'{title: $t, description: ($d | fromjson), source_branch: $h, target_branch: $b}' \
+	# H3 fix: use --rawfile, not jq -Rs . | fromjson round-trip.
+	jq -n --arg t "$title" --rawfile d "$body_file" --arg b "$base" --arg h "$head" \
+		'{title: $t, description: $d, source_branch: $h, target_branch: $b}' \
 		| gitlab__api POST "projects/${project}/merge_requests" -d @-
 }
 

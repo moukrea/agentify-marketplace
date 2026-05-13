@@ -33,6 +33,20 @@ set -euo pipefail
 GIT_HOST_LIB_DIR="${GIT_HOST_LIB_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 GIT_HOST_DRIVERS_DIR="${GIT_HOST_LIB_DIR}/git_host_drivers"
 
+# M-21 fix: driver-name validation. A malicious agentify.config.json
+# setting .git_host.driver to "../../../tmp/evil" could otherwise cause
+# this dispatcher to source arbitrary code via the [ -f "$driver" ] check
+# (the path resolves relative to the drivers dir and a `.sh` file outside
+# the directory tree would be sourced into the caller's shell). Validate
+# against a safe-character class before sourcing.
+git_host__validate_driver_name() {
+	local name="$1"
+	if ! [[ "$name" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
+		printf 'git_host: invalid driver name %q (must match ^[a-z0-9][a-z0-9_-]*$)\n' "$name" >&2
+		return 64
+	fi
+}
+
 git_host__detect_from_remote() {
 	local url
 	url=$(git remote get-url origin 2>/dev/null || true)
@@ -69,6 +83,7 @@ git_host__resolve_driver() {
 
 git_host__load_driver() {
 	local name="$1"
+	git_host__validate_driver_name "$name" || return $?
 	local driver="${GIT_HOST_DRIVERS_DIR}/${name}.sh"
 	if [ ! -f "$driver" ]; then
 		printf 'git_host: unknown driver %q (no file at %s)\n' "$name" "$driver" >&2
