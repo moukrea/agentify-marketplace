@@ -1,104 +1,174 @@
 #!/usr/bin/env bash
-# task_backend_drivers/browser.sh — last-resort fallback for task
-# systems with neither API nor MCP coverage. Shells out to a user-
-# supplied Chromium-bearing container running a per-target Node script
-# under plugins/agentify/lib/task_backend_drivers/browser/scripts/<target>.js.
+# task_backend_drivers/browser.sh — last-resort fallback for task systems
+# with neither API nor MCP-native coverage. Redesigned in C7 (per the
+# adversarial review) to leverage Claude Code's native browser capability
+# via the two-mode MCP pattern, rather than ship a Docker invocation:
 #
-# Configuration:
-#   task_backend.browser.image  — Docker image (default node:lts-bookworm).
-#   task_backend.endpoint       — base URL of the legacy system (passed
-#                                 into the script as $TARGET_URL).
-#   AGENTIFY_BROWSER_SCRIPT     — script filename under
-#                                 plugins/agentify/lib/task_backend_drivers/browser/scripts/
-#                                 (defaults to "default.js"; the user
-#                                 places their own script here).
+#   * Interactive mode (inside a Claude Code session): emit a stable
+#     MCP tool-call envelope on stdout. The calling skill picks up the
+#     envelope and dispatches to the user-configured browser MCP server
+#     (e.g. Playwright MCP, Browserbase MCP, Chrome DevTools MCP). The
+#     server runs *inside Claude Code's sandbox*, with no `docker run`,
+#     no floating-tag image risk, no host network egress to manage, no
+#     script-path traversal surface.
 #
-# Each verb invokes the same runner with a `<op>` argument; the script
-# is expected to expose taskCreate, taskList, taskGet, taskUpdate,
-# prdCreate, prdGet, planCreate, planGet, brainstormCreate, adrCreate,
-# charterCreate, charterGet, taskLink, taskSearch, validate. The runner
-# (`runner.js`) ships with the plugin and dispatches to the user script.
+#   * Headless mode: when no Claude Code session is detected, fall back
+#     to a read-only HTTP fetch of `task_backend.endpoint` via curl
+#     (User-Agent advertised, follows redirects, time-limited). Only
+#     `task_list` and `task_get` make sense in this mode; write verbs
+#     refuse with exit 78 and a clear "interactive Claude Code session
+#     required" message.
+#
+# Configuration (agentify.config.json):
+#   task_backend:
+#     driver: browser
+#     endpoint: "https://internal-portal.example.com"   # target URL
+#     browser:
+#       mcp_server: "playwright"   # the MCP server name the user has
+#                                    # installed; the skill dispatches to
+#                                    # the matching tool. Optional in
+#                                    # headless mode.
+#       fallback: "webfetch"        # webfetch | none
+#                                    # webfetch (default): use curl in
+#                                    # headless mode for read-only verbs.
+#                                    # none: refuse all verbs when not in
+#                                    # a Claude Code session.
 
-browser__require_docker() {
-	command -v docker >/dev/null 2>&1 || {
+set -euo pipefail
+
+browser__interactive() {
+	# Claude Code sets CLAUDECODE=1 in skill subprocesses. This is the
+	# documented signal; do NOT use `[ -t 0 ]` because stdin is typically
+	# a pipe in skill execution.
+	[ -n "${CLAUDECODE:-}" ]
+}
+
+browser__endpoint() {
+	if [ -f ./agentify.config.json ]; then
+		jq -r '.task_backend.endpoint // empty' ./agentify.config.json 2>/dev/null
+	fi
+}
+
+browser__mcp_server() {
+	if [ -f ./agentify.config.json ]; then
+		jq -r '.task_backend.browser.mcp_server // empty' ./agentify.config.json 2>/dev/null
+	fi
+}
+
+browser__fallback() {
+	if [ -f ./agentify.config.json ]; then
+		jq -r '.task_backend.browser.fallback // "webfetch"' ./agentify.config.json 2>/dev/null
+	else
+		printf 'webfetch'
+	fi
+}
+
+# Emit the canonical MCP tool-call envelope for an interactive caller.
+# The envelope matches the shape produced by jira-mcp / notion-mcp /
+# linear-mcp drivers, so any skill consuming any of these can branch
+# generically on `.mcp_call`.
+browser__emit_mcp_envelope() {
+	local verb="$1"; shift
+	local server
+	server=$(browser__mcp_server)
+	if [ -z "$server" ]; then
 		cat >&2 <<-MSG
-			browser: 'docker' not found on PATH.
-			The browser task-backend driver requires a Chromium-bearing
-			container. Install Docker or switch task_backend.driver to a
-			supported alternative (jira-api/notion-api/linear-api/...).
+			browser: task_backend.browser.mcp_server is required for interactive
+			use. Set it in agentify.config.json to the name of an installed
+			MCP server (e.g. "playwright", "browserbase", "chrome-devtools").
 		MSG
-		return 127
+		return 64
+	fi
+	local target_url
+	target_url=$(browser__endpoint)
+	local args_json
+	args_json=$(printf '%s\n' "$@" | jq -R . | jq -s .)
+	jq -cn \
+		--arg server "$server" \
+		--arg verb "$verb" \
+		--arg target "$target_url" \
+		--argjson args "$args_json" \
+		'{
+			mcp_call: {
+				server: $server,
+				tool: ("browser_" + $verb),
+				args: {
+					target_url: $target,
+					verb: $verb,
+					verb_args: $args
+				}
+			}
+		}'
+}
+
+# Headless fallback. Only read-only verbs make sense; everything else
+# refuses with a clear error rather than silently succeeding.
+browser__webfetch_read_only() {
+	local verb="$1"; shift
+	local target
+	target=$(browser__endpoint)
+	if [ -z "$target" ]; then
+		echo "browser: task_backend.endpoint is required for the webfetch fallback" >&2
+		return 64
+	fi
+	curl --fail-with-body --silent --location --max-time 30 \
+		--user-agent "agentify-task-backend-browser/4.4.0 (+https://github.com/moukrea/agentify-marketplace)" \
+		"$target" || {
+		echo "browser webfetch: ${target} unreachable" >&2
+		return 1
 	}
 }
 
-browser__image() {
-	local img
-	if [ -f ./agentify.config.json ]; then
-		img=$(jq -r '.task_backend.browser.image // empty' ./agentify.config.json 2>/dev/null)
-	fi
-	printf '%s' "${img:-node:lts-bookworm}"
+browser__refuse_headless() {
+	local verb="$1"
+	cat >&2 <<-MSG
+		browser: verb '${verb}' requires an interactive Claude Code session.
+		Headless invocation falls back to a read-only HTTP fetch; write verbs
+		(${verb} is one) need the MCP server. Re-run inside Claude Code, or
+		switch task_backend.driver to a non-browser provider for headless flows.
+	MSG
+	return 78
 }
 
-browser__script() {
-	local s="${AGENTIFY_BROWSER_SCRIPT:-default.js}"
-	printf '%s' "$s"
-}
-
-browser__scripts_dir() {
-	printf '%s' "$(cd "$(dirname "${BASH_SOURCE[0]}")/browser/scripts" && pwd 2>/dev/null || \
-		dirname "${BASH_SOURCE[0]}")/browser/scripts"
-}
-
-browser__runner() {
-	# A built-in runner.js the plugin ships at lib/task_backend_drivers/
-	# browser/runner.js. It loads the user script and dispatches the verb.
-	printf '%s' "$(dirname "${BASH_SOURCE[0]}")/browser/runner.js"
-}
-
+# Dispatch one verb: emit envelope when interactive, fall back when not.
 browser__invoke() {
-	# $1: verb; $2+: JSON-encoded arguments (one per arg)
-	browser__require_docker || return $?
 	local verb="$1"; shift
-	local img; img=$(browser__image)
-	local scripts_dir; scripts_dir=$(browser__scripts_dir)
-	local runner; runner=$(browser__runner)
-	if [ ! -f "$runner" ]; then
-		echo "browser: runner.js missing at $runner — re-install the plugin" >&2
-		return 64
+	if browser__interactive; then
+		browser__emit_mcp_envelope "$verb" "$@"
+		return
 	fi
-	local script; script=$(browser__script)
-	local target_url=""
-	if [ -f ./agentify.config.json ]; then
-		target_url=$(jq -r '.task_backend.endpoint // ""' ./agentify.config.json 2>/dev/null)
-	fi
-	# Pass args as a JSON array on stdin so the runner can parse cleanly.
-	local args_json; args_json=$(printf '%s\n' "$@" | jq -R . | jq -s .)
-	# Run the container, mount the scripts dir read-only.
-	printf '%s' "$args_json" | docker run --rm -i \
-		-v "$(dirname "$runner"):/runner:ro" \
-		-v "$scripts_dir:/scripts:ro" \
-		-e "AGENTIFY_VERB=$verb" \
-		-e "AGENTIFY_SCRIPT=$script" \
-		-e "TARGET_URL=$target_url" \
-		"$img" sh -c 'cd /runner && node runner.js' 2>/dev/null
+	local fallback
+	fallback=$(browser__fallback)
+	case "$verb" in
+		task_list|task_get|prd_get|plan_get|charter_get)
+			if [ "$fallback" = "webfetch" ]; then
+				browser__webfetch_read_only "$verb" "$@"
+			else
+				browser__refuse_headless "$verb"
+			fi
+			;;
+		*)
+			browser__refuse_headless "$verb"
+			;;
+	esac
 }
 
-task_backend_charter_create()    { browser__invoke charterCreate    "$@"; }
-task_backend_charter_get()       { browser__invoke charterGet       "$@"; }
-task_backend_prd_create()        { browser__invoke prdCreate        "$@"; }
-task_backend_prd_get()           { browser__invoke prdGet           "$@"; }
-task_backend_brainstorm_create() { browser__invoke brainstormCreate "$@"; }
-task_backend_plan_create()       { browser__invoke planCreate       "$@"; }
-task_backend_plan_get()          { browser__invoke planGet          "$@"; }
-task_backend_task_create()       { browser__invoke taskCreate       "$@"; }
-task_backend_task_list()         { browser__invoke taskList         "$@"; }
-task_backend_task_get()          { browser__invoke taskGet          "$@"; }
-task_backend_task_update()       { browser__invoke taskUpdate       "$@"; }
-task_backend_task_link()         { browser__invoke taskLink         "$@"; }
-task_backend_task_search()       { browser__invoke taskSearch       "$@"; }
-task_backend_adr_create()        { browser__invoke adrCreate        "$@"; }
+task_backend_charter_create()    { browser__invoke charter_create    "$@"; }
+task_backend_charter_get()       { browser__invoke charter_get       "$@"; }
+task_backend_prd_create()        { browser__invoke prd_create        "$@"; }
+task_backend_prd_get()           { browser__invoke prd_get           "$@"; }
+task_backend_brainstorm_create() { browser__invoke brainstorm_create "$@"; }
+task_backend_plan_create()       { browser__invoke plan_create       "$@"; }
+task_backend_plan_get()          { browser__invoke plan_get          "$@"; }
+task_backend_task_create()       { browser__invoke task_create       "$@"; }
+task_backend_task_list()         { browser__invoke task_list         "$@"; }
+task_backend_task_get()          { browser__invoke task_get          "$@"; }
+task_backend_task_update()       { browser__invoke task_update       "$@"; }
+task_backend_task_link()         { browser__invoke task_link         "$@"; }
+task_backend_task_search()       { browser__invoke task_search       "$@"; }
+task_backend_adr_create()        { browser__invoke adr_create        "$@"; }
 
 task_backend_validate() {
-	echo "browser validate: legacy backend is authoritative; advisory only."
+	echo "browser validate: external backend is authoritative; advisory only."
 	return 0
 }

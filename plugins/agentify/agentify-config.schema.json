@@ -230,11 +230,17 @@
         "browser": {
           "type": "object",
           "additionalProperties": false,
+          "description": "Configuration for the browser task-backend / fleet-discover drivers. C7 redesigned both to leverage Claude Code's native browser capability via the two-mode MCP pattern; the prior Docker-based runner is no longer used.",
           "properties": {
-            "image": {
+            "mcp_server": {
               "type": "string",
-              "description": "Docker image to run Chromium scripts in. User-supplied; plugin does not vendor a runtime.",
-              "default": "node:lts-bookworm"
+              "description": "Name of the MCP browser server the user has installed (e.g. 'playwright', 'browserbase', 'chrome-devtools'). The skill dispatches to the matching tool inside the Claude Code session. Optional when only the read-only webfetch fallback is needed."
+            },
+            "fallback": {
+              "type": "string",
+              "enum": ["webfetch", "none"],
+              "default": "webfetch",
+              "description": "Headless-mode behaviour when no Claude Code session is active. 'webfetch' uses curl for read-only verbs (task_list/task_get/...); 'none' refuses every verb."
             }
           }
         }
