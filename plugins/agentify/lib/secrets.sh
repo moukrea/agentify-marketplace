@@ -19,6 +19,12 @@
 
 set -euo pipefail
 
+# H-26 fix: source _io.sh to pick up the bash 4+ guard (secrets.sh uses
+# `declare -A` at line ~138, a bash 4+ feature). Also brings in shared
+# sysexits constants used by error paths.
+# shellcheck source=_io.sh
+. "$(dirname "${BASH_SOURCE[0]}")/_io.sh"
+
 # Bash 5.2 introduced the patsub_replacement shopt (default ON), which makes
 # `&` in the replacement of ${var//pat/rep} expand to the matched text. The
 # secrets substitution layer must NOT do this — a secret value containing `&`

@@ -13,6 +13,12 @@
 # Repo resolution: each verb takes an optional `--repo <owner/name>` flag.
 # When absent, gh falls back to the local `git remote` (its normal behaviour).
 
+# H-26 fix: source _io.sh to pick up the bash 4+ guard (github.sh uses
+# `${state,,}` lowercase parameter expansion). Also brings shared
+# sysexits constants used by error paths.
+# shellcheck source=../_io.sh
+. "$(dirname "${BASH_SOURCE[0]}")/../_io.sh"
+
 git_host__github_require_gh() {
 	if ! command -v gh >/dev/null 2>&1; then
 		cat >&2 <<-MSG

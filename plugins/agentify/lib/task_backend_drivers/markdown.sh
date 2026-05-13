@@ -16,6 +16,12 @@
 #
 # Refs are POSIX paths relative to the repo root.
 
+# H-26 fix: source _io.sh to pick up the bash 4+ guard (markdown.sh uses
+# `mapfile` at line ~414 which is a bash 4+ builtin) and the shared
+# helpers + sysexits constants. _io.sh is idempotent under double-source.
+# shellcheck source=../_io.sh
+. "$(dirname "${BASH_SOURCE[0]}")/../_io.sh"
+
 # Resolve <path_root>. Precedence:
 #   1. task_backend.path_root in agentify.config.json (lifecycle-specific)
 #   2. loop.path_root in agentify.config.json (loop-working-dir; the
