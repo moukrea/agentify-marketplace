@@ -47,6 +47,48 @@ EOF
 	echo "$output" | grep -q '^bump=minor$'
 }
 
+# B-2 regression: the hyphenated synonym `BREAKING-CHANGE:` is a
+# Conventional Commits 1.0.0 §16 alias and MUST also bump major.
+# The old `^BREAKING CHANGE:( |!|$)` regex missed this form entirely.
+@test "bump-version: BREAKING-CHANGE: hyphenated synonym bumps major" {
+	cat >msg <<'EOF'
+feat(api): kill v1 endpoints
+
+The /v1/* endpoints are removed.
+
+BREAKING-CHANGE: clients must migrate to /v2/*.
+EOF
+	git commit --allow-empty -q -F msg
+
+	run bash "$REPO_ROOT/bin/bump-version.sh" --print
+	[ "$status" -eq 0 ]
+	echo "$output" | grep -q '^bump=major$'
+}
+
+# B-2 companion: gen-changelog.sh already honored both spellings;
+# this asserts parity with bump-version.sh after the regex fix.
+@test "gen-changelog: BREAKING-CHANGE: hyphenated synonym writes BREAKING row" {
+	mkdir -p plugins/agentify
+	cat >plugins/agentify/BREAKING_CHANGES.md <<'EOF'
+# Breaking changes
+
+<!-- No breaking changes yet. -->
+EOF
+	git add plugins/agentify/BREAKING_CHANGES.md
+	git commit -q -m "chore: seed breaking log"
+
+	cat >msg <<'EOF'
+feat(api): kill v1 endpoints
+
+BREAKING-CHANGE: clients must migrate to /v2/*.
+EOF
+	git commit --allow-empty -q -F msg
+
+	run bash "$REPO_ROOT/bin/gen-changelog.sh" --print
+	[ "$status" -eq 0 ]
+	echo "$output" | grep -q '\[BREAKING\]'
+}
+
 # Real footer at start-of-line MUST bump major.
 @test "bump-version: real BREAKING CHANGE: footer bumps major" {
 	cat >msg <<'EOF'

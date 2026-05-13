@@ -60,15 +60,23 @@ if [ -n "$EXPLICIT_BUMP" ]; then
 	esac
 else
 	# Detect BREAKING-class commits per Conventional Commits 1.0.0:
-	#   * `BREAKING CHANGE:` only when it appears at the START of a line
-	#     inside the commit message (footer position) — `git log --grep`
-	#     with --extended-regexp anchors to start-of-line within the
-	#     whole message, so prose mentioning the phrase mid-sentence does
-	#     not match.
+	#   * `BREAKING CHANGE:` OR the spec-synonym `BREAKING-CHANGE:` only
+	#     when it appears at the START of a line inside the commit
+	#     message (footer position) — `git log --grep` with
+	#     --extended-regexp anchors to start-of-line within the whole
+	#     message, so prose mentioning the phrase mid-sentence does not
+	#     match.
 	#   * `<type>!:` or `<type>(scope)!:` in the SUBJECT line.
 	# Major dominates feat dominates patch.
+	#
+	# B-2 fix: the old regex `'^BREAKING CHANGE:( |!|$)'` only matched
+	# the space-separated form, missing the hyphenated synonym that
+	# Conv-Commits 1.0.0 §16 explicitly permits. The bogus `( |!|$)`
+	# suffix is also dropped — Conv-Commits has no `BREAKING CHANGE!:`
+	# form; the `!` lives in the type prefix only. Matches
+	# bin/gen-changelog.sh:68 which already honors both spellings.
 	has_breaking_footer=$(git log "${last_tag}..HEAD" \
-		--extended-regexp --grep='^BREAKING CHANGE:( |!|$)' \
+		--extended-regexp --grep='^BREAKING[- ]CHANGE:' \
 		--format='%H' 2>/dev/null | head -n 1)
 	has_bang_break=$(git log "${last_tag}..HEAD" --format='%s' 2>/dev/null \
 		| grep -E '^[a-z]+(\([^)]+\))?!:' | head -n 1 || true)
