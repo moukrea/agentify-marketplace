@@ -58,11 +58,22 @@ if [ -n "$EXPLICIT_BUMP" ]; then
 	*) echo "bump-version: --bump must be major|minor|patch" >&2; exit 2 ;;
 	esac
 else
-	# Look for BREAKING CHANGE: footers or `feat!:` / `<type>!:` in the
-	# log. Major dominates feat dominates patch.
-	if git log "${last_tag}..HEAD" --format='%s%n%b' | grep -qE '(BREAKING CHANGE:|^[a-z]+(\([^)]+\))?!:)'; then
+	# Detect BREAKING-class commits per Conventional Commits 1.0.0:
+	#   * `BREAKING CHANGE:` only when it appears at the START of a line
+	#     inside the commit message (footer position) — `git log --grep`
+	#     with --extended-regexp anchors to start-of-line within the
+	#     whole message, so prose mentioning the phrase mid-sentence does
+	#     not match.
+	#   * `<type>!:` or `<type>(scope)!:` in the SUBJECT line.
+	# Major dominates feat dominates patch.
+	has_breaking_footer=$(git log "${last_tag}..HEAD" \
+		--extended-regexp --grep='^BREAKING CHANGE:( |!|$)' \
+		--format='%H' 2>/dev/null | head -n 1)
+	has_bang_break=$(git log "${last_tag}..HEAD" --format='%s' 2>/dev/null \
+		| grep -E '^[a-z]+(\([^)]+\))?!:' | head -n 1 || true)
+	if [ -n "$has_breaking_footer" ] || [ -n "$has_bang_break" ]; then
 		bump="major"
-	elif git log "${last_tag}..HEAD" --format='%s' | grep -qE '^feat(\([^)]+\))?:'; then
+	elif git log "${last_tag}..HEAD" --format='%s' 2>/dev/null | grep -qE '^feat(\([^)]+\))?:'; then
 		bump="minor"
 	fi
 fi

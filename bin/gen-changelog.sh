@@ -54,9 +54,17 @@ while IFS= read -r -d '' record; do
 		[ "${BASH_REMATCH[4]}" = "!" ] && breaking="yes"
 		rest="${BASH_REMATCH[5]}"
 	fi
-	if [[ "$body" == *"BREAKING CHANGE:"* ]]; then
-		breaking="yes"
-	fi
+	# Per Conventional Commits 1.0.0, BREAKING CHANGE: only counts when
+	# it appears at the START of a body line (footer position). Walk the
+	# body line by line — substring match would trip on any commit body
+	# that *describes* the convention in prose.
+	while IFS= read -r _line; do
+		if [[ "$_line" == "BREAKING CHANGE:"* || "$_line" == "BREAKING-CHANGE:"* ]]; then
+			breaking="yes"
+			break
+		fi
+	done <<<"$body"
+	unset _line
 	commits+=("${hash}|${type}|${scope}|${rest}|${breaking}")
 done < <(
 	git log "${SINCE}..HEAD" --reverse --no-merges -z \
