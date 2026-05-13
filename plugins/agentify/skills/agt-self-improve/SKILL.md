@@ -1,4 +1,5 @@
 ---
+name: agt-self-improve
 description: Audit the agentify project against current Claude Code/model state via online research; detect drift, gaps, and stale context entries; produce a schema-valid structured-review file under audits/ that REVISE_AGENTIFY_PROMPT.md can consume as a synthetic review (gated behind mandatory human review).
 allowed-tools: WebSearch WebFetch Read Bash Edit Write
 ---
@@ -30,7 +31,7 @@ Output: a structured-review file at `audits/<timestamp>.md` conforming to [`find
 4. **Classify changes per source:** `irrelevant` (cosmetic), `new info` (additive — note for inclusion), `supersedes existing` (replace cached snippet), `contradicts existing` (raise as a finding).
 5. **Cross-search for recent GitHub issues** affecting referenced features. Use `WebSearch` for Claude Code repo issues touching the topics in `context/known-bugs.md`. Newly-opened or recently-closed-with-changes issues become findings.
 6. **Cross-search for recent Anthropic engineering blog posts.** Same pattern: posts since the last audit that touch agentify-relevant topics.
-7. **Ingest open feedback issues** (paired with WS-G via `plugins/agentify/lib/feedback_ingest.sh`). Each open issue becomes a finding with `feedback_issue_id` set and `severity: moderate` by default (humans flagged real issues; the `caused_by_prior_revise` field is `false` since the issue source is external).
+7. **Ingest open feedback issues** (paired with WS-G via `plugins/agentify/lib/feedback_ingest.sh`). Each open issue becomes a finding with `severity: moderate` by default (humans flagged real issues) and `synthetic_source: "human"` (the issue source is external, not LLM-produced). Per v2 schema (post-C3), the v1 fields `feedback_issue_id` and `caused_by_prior_revise` are no longer carried — issue URLs go into the finding's `references[]` array instead.
 8. **Compose findings** into the audit-review schema. Per-finding requirements: at least one URL citation (with `fetched_at` proving the audit actually fetched it) and a falsifiable `acceptance_criterion`.
 9. **Write `audits/<timestamp>.md`.** The file format is:
    ```
@@ -48,7 +49,7 @@ Output: a structured-review file at `audits/<timestamp>.md` conforming to [`find
    <description>
    References: ... ; Acceptance: <criterion>
    ```
-10. **Surface to caller.** Print a one-line summary: "Audit complete: <N findings> (critical=A major=B moderate=C strategic=D polish=E). audits/<timestamp>.md." Exit 0.
+10. **Surface to caller.** Print a one-line summary: "Audit complete: <N findings> (critical=A major=B moderate=C polish=D info=E). audits/<timestamp>.md." Exit 0. The severity vocabulary tracks `finding-schema.json` v2 enum.
 
 ## Implementation snippets
 
@@ -117,16 +118,18 @@ cat > "$audit_path" <<EOF
 \`\`\`json
 $(jq -n --arg id "$audit_id" \
        --arg ts "$audit_id" \
-       --arg version "$(grep -oE '\(v[0-9]+\.[0-9]+\)' AGENTIFY.md | head -1 | tr -d '()')" \
+       --arg version "$(jq -r .version plugins/agentify/.claude-plugin/plugin.json)" \
        --argjson findings "$findings_json" \
        --argjson counts "$headline_counts_json" \
        '{
-         schema_version: 1,
+         schema_version: 2,
          audit_id: $id,
          produced_at: $ts,
          produced_by: {skill: "agt-self-improve", version: $version, model: "claude-opus-4-7"},
          synthetic_source: "self-improve",
-         verdict: (if ($counts.critical + $counts.major) > 0 then "iterate" else "ship" end),
+         verdict: (if $counts.critical > 0 then "broken"
+                   elif $counts.major > 0 then "degraded"
+                   else "healthy" end),
          headline_counts: $counts,
          findings: $findings
        }')

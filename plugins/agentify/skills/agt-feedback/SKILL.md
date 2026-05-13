@@ -1,4 +1,5 @@
 ---
+name: agt-feedback
 description: Draft a structured feedback report from a target repo and submit via git_host issue_create (works on github / gitlab / gitea / codeberg / generic-rest tenants) to the configured upstream agentify-marketplace repo. Asks the engineer for the four free-text fields, generates a UUID, presents the body for confirmation, then submits. --dry-run prints the issue body without submitting.
 allowed-tools: Read Bash
 ---
@@ -30,7 +31,7 @@ Channel for users of agentified target repos to send structured feedback to the 
 6. **Generate a UUIDv4** for the `agentify-feedback-id` machine-readable footer.
 7. **Compose the issue body** by templating the answers into `.github/ISSUE_TEMPLATE/agentify-feedback.md`'s body structure (the engineer reviews the rendered body before submission).
 8. **Confirm.** Print the rendered body. Ask: "Submit to <upstream-repo>? (y/N)". On `--dry-run`: skip confirm, just print.
-9. **Submit via `gh`.** `gh issue create --repo <upstream-repo> --title "[feedback] <one-liner>" --label agentify-feedback,triage --body-file -`. Pipe the rendered body in via stdin.
+9. **Submit via `git_host issue_create`.** Routes through `plugins/agentify/lib/git_host.sh` so the skill works on github / gitlab / gitea / codeberg / generic-rest tenants per ADR 0002. The dispatcher selects the driver from `agentify.config.json:.git_host.driver` (or auto-detects from the origin URL).
 10. **Report.** Print the URL of the new issue. Suggest follow-up: "Track via 'gh issue view <#>'; the upstream maintainer's /agt-self-improve will pick this up on the next audit (typically weekly)."
 
 ## Implementation snippets
