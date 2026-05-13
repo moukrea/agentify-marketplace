@@ -17,6 +17,7 @@ durable commitments.
 | [0007](./0007-agentify-native-lifecycle.md)           | agentify-native lifecycle (no third-party) | accepted | 2026-05-12 |
 | [0008](./0008-fleet-marketplace-bootstrap.md)         | fleet marketplace bootstrap                | accepted | 2026-05-12 |
 | [0009](./0009-marketplace-self-dogfooding.md)         | marketplace self-dogfooding                | accepted | 2026-05-12 |
+| [0010](./0010-fix-pass-discipline.md)                 | fix-pass discipline (regression-bats rule) | adopted  | 2026-05-13 |
 
 ## Authoring
 
