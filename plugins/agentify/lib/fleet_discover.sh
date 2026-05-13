@@ -74,16 +74,50 @@ fleet_discover() {
 		accumulated=$(jq -cn --argjson a "$accumulated" --argjson b "$provider_out" '$a + $b')
 	done
 
-	# Deduplicate by .url and stamp with discovered_at + schema_version + fleet_name.
+	# H10 fix: canonicalize URLs BEFORE dedup. `unique_by(.url)` is byte-
+	# exact equality; without canonicalization, five variants of the same
+	# peer (case, trailing slash, .git suffix, SSH form, http vs https)
+	# all survive. Pre-pass:
+	#   * lowercase the host (URL host is case-insensitive)
+	#   * strip trailing '/' and '.git'
+	#   * rewrite git@HOST:OWNER/NAME[.git] -> https://HOST/OWNER/NAME
+	#   * coerce http:// -> https:// for known forge hosts (github.com,
+	#     gitlab.com, codeberg.org) where http is just a downgrade.
 	jq -n \
 		--argjson peers "$accumulated" \
 		--arg fleet "${fleet_name:-}" \
 		--arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-		'{
+		'
+		def canon_url:
+			# Step 1: git@host:owner/name[.git] -> https://host/owner/name
+			(if test("^git@[^:]+:") then
+				sub("^git@(?<h>[^:]+):"; "https://\(.h)/")
+			else . end)
+			# Step 2: ssh://git@host/... -> https://host/...
+			| (if startswith("ssh://git@") then
+				sub("^ssh://git@"; "https://")
+			else . end)
+			# Step 3: lowercase host. URLs without a scheme are left alone.
+			| (if test("^https?://") then
+				(capture("^(?<scheme>https?://)(?<host>[^/]+)(?<rest>.*)$") as $p
+				 | $p.scheme + ($p.host | ascii_downcase) + $p.rest)
+			else . end)
+			# Step 4: strip trailing .git and trailing /.
+			| sub("\\.git$"; "")
+			| sub("/$"; "")
+			# Step 5: coerce http -> https for the well-known forges.
+			| (if test("^http://(github\\.com|gitlab\\.com|codeberg\\.org)/") then
+				sub("^http://"; "https://")
+			else . end);
+		{
 			schema_version: 2,
 			discovered_at: $at,
 			fleet_name: (if $fleet == "" then null else $fleet end),
-			peers: ($peers | unique_by(.url))
+			peers: (
+				$peers
+				| map(.url |= canon_url)
+				| unique_by(.url)
+			)
 		}'
 }
 

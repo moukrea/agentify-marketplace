@@ -5,17 +5,24 @@
 # consumes.
 #
 # Public interface:
-#   practice_track fetch          <source-id>                # writes raw/<id>/<date>.md; "changed" or "unchanged"
-#   practice_track diff           <source-id>                # last-2 fetches diff
+#   practice_track fetch          <source-id>                # writes raw/<id>/<date>.md
 #   practice_track list_sources                              # JSON of sources.yaml (unioned with sources.local.yaml)
-#   practice_track adoption_check <source-id> <reco-id>      # runs the recommendation's adoption_check_command
 #   practice_track gc             [retention-days=180]       # prunes raw/ older than N days
+#
+# Note: `diff` and `adoption_check` subcommands were documented in the
+# pre-fix header but never implemented (the dispatcher's case statement
+# only handles fetch | list_sources | gc). They are tracked for a future
+# release; until then the /mkt-practice-evolve skill computes diffs
+# directly via `diff -u raw/<id>/{N-1,N}.md` and adoption via the
+# recommendation's documented command. The dispatcher will reject the
+# subcommands rather than silently no-op.
 #
 # Driver dispatch: each source's `driver:` field selects
 # lib/practice_track_drivers/<driver>.sh. Drivers implement a single
 # function `practice_driver_fetch <url>` that prints canonicalised
-# markdown to stdout, exits 0 on success (changed), 1 on unchanged
-# (304 / hash match), 2 on transport error.
+# markdown to stdout, exits 0 on success and 2 on transport error.
+# A future iteration will add exit 1 "unchanged" semantics by hashing
+# canonical content against a persisted cache; see ADR 0006 followups.
 
 set -euo pipefail
 

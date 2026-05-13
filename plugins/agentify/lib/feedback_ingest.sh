@@ -78,15 +78,41 @@ if [ -z "${raw:-}" ]; then
     exit 2
   fi
 
-  # Driver dependency check (git_host abstraction). For the github driver this
-  # collapses to a gh-availability check; for other drivers it's whatever the
-  # driver requires. When unavailable, emit empty so /agt-self-improve still
-  # runs (per WS-G-005 graceful-degradation).
+  # H21 fix: driver dependency check used to hard-code `gh|glab`, which
+  # falsely declared an empty list for gitea / codeberg / generic-rest
+  # drivers (those use curl, not a CLI). Source git_host.sh and ask it
+  # which driver is active; only require a CLI when the active driver
+  # genuinely needs one.
   GIT_HOST_LIB="${GIT_HOST_LIB:-$(dirname "${BASH_SOURCE[0]}")/git_host.sh}"
-  if ! command -v gh >/dev/null 2>&1 && ! command -v glab >/dev/null 2>&1; then
-    echo "WARN: no git-host CLI (gh/glab) found; emitting empty list" >&2
-    echo '[]'
-    exit 0
+  if [ -f "$GIT_HOST_LIB" ]; then
+    # shellcheck source=git_host.sh
+    . "$GIT_HOST_LIB"
+    _gh_driver=$(git_host driver 2>/dev/null || echo "github")
+    case "$_gh_driver" in
+      github)
+        if ! command -v gh >/dev/null 2>&1; then
+          echo "WARN: github driver requires 'gh' CLI; emitting empty list" >&2
+          echo '[]'
+          exit 0
+        fi
+        ;;
+      gitlab)
+        if ! command -v glab >/dev/null 2>&1; then
+          echo "WARN: gitlab driver requires 'glab' CLI; emitting empty list" >&2
+          echo '[]'
+          exit 0
+        fi
+        ;;
+      gitea|codeberg|generic-rest)
+        # curl-only drivers — no CLI to check. Fall through to fetch.
+        ;;
+      *)
+        echo "WARN: unknown git-host driver '$_gh_driver'; emitting empty list" >&2
+        echo '[]'
+        exit 0
+        ;;
+    esac
+    unset _gh_driver
   fi
 fi
 

@@ -98,8 +98,15 @@ task_backend_brainstorm_create() {
 		# We append rather than overwrite; do a read-modify-write.
 		local cur; cur=$(task_backend_prd_get "$prd_ref")
 		local merged; merged=$(printf '%s\n\n---\n\nBrainstorm:\n\n%s' "$cur" "$(jq -r . <<<"$body")")
-		jq -n --arg pid "$prd_ref" --arg c "$merged" '{pid:$pid,c:$c}' \
-			| { read -r vars; linear__graphql "$q" "$vars"; } >/dev/null
+		# B-4 fix: jq -n without -c emits pretty-printed JSON; the prior
+		# `read -r vars` consumed only the first line ('{'), so the actual
+		# GraphQL variables payload was the literal '{' — projectUpdate
+		# silently ran with empty variables and reset description to
+		# whatever Linear coerces from null. Use -c (compact, single line)
+		# and a single-shot capture.
+		local vars
+		vars=$(jq -cn --arg pid "$prd_ref" --arg c "$merged" '{pid:$pid,c:$c}')
+		linear__graphql "$q" "$vars" >/dev/null
 		printf 'linear:project/%s#brainstorm\n' "$prd_ref"
 	else
 		# Standalone brainstorm = issue labelled "agentify-brainstorm".

@@ -137,14 +137,62 @@ task_backend_task_update() {
 	if ! printf '%s\n' "$AGT_TASK_STATES" | tr ' ' '\n' | grep -qx -- "$state"; then
 		echo "github-projects task_update: unknown state $state" >&2; return 64
 	fi
-	# Map state → action.
+	# H13 fix: state-machine repair.
+	#   * `done|cancelled` close the issue.
+	#   * Any non-terminal state must REOPEN the issue first (was missing),
+	#     so a task that hit `done` and is later re-flagged `blocked` stops
+	#     leaving the GH issue closed forever.
+	#   * Remove ALL prior `agentify-state:*` labels before adding the new
+	#     one. The old code removed only the literal `agentify-state:open`,
+	#     which doesn't exist in the canonical vocabulary — every transition
+	#     therefore accumulated stale labels.
+	# The `2>/dev/null || true` swallowed gh errors (e.g. "label not found"
+	# on first run before the labels exist). Replaced with explicit label
+	# bootstrap via `gh label create --force` on demand.
+	ghp__ensure_state_labels
 	case "$state" in
-	done|cancelled) gh issue close "$ref" --comment "${comment:-state=$state}" ;;
+	done|cancelled)
+		gh issue close "$ref" --comment "${comment:-state=$state}"
+		;;
 	in_progress|in_review|blocked|ready|draft)
-		gh issue edit "$ref" --add-label "agentify-state:$state" --remove-label "agentify-state:open" 2>/dev/null || true
+		# Reopen the issue if it's closed; --reason completed/not_planned
+		# are fine to ignore here since we just want the open state.
+		gh issue reopen "$ref" >/dev/null 2>&1 || true
+		# Remove every agentify-state:* label currently set (idempotent;
+		# gh ignores "label not on issue").
+		local s
+		for s in draft ready in_progress blocked in_review done cancelled; do
+			[ "$s" = "$state" ] && continue
+			gh issue edit "$ref" --remove-label "agentify-state:$s" >/dev/null 2>&1 || true
+		done
+		gh issue edit "$ref" --add-label "agentify-state:$state"
 		[ -n "$comment" ] && gh issue comment "$ref" --body "$comment"
 		;;
 	esac
+}
+
+# Lazy bootstrap of the agentify-state:* label set. Idempotent: gh label
+# create --force returns 0 whether the label exists or not (it updates
+# colour/description on the second pass).
+ghp__ensure_state_labels() {
+	ghp__require_gh || return $?
+	# Skip if any agentify-state label already exists (cheap check).
+	if gh label list --search 'agentify-state:' 2>/dev/null | grep -q 'agentify-state:'; then
+		return 0
+	fi
+	local s color
+	for s in draft ready in_progress blocked in_review done cancelled; do
+		case "$s" in
+			draft|ready)              color="ededed" ;;
+			in_progress)              color="0e8a16" ;;
+			blocked)                  color="d93f0b" ;;
+			in_review)                color="fbca04" ;;
+			done)                     color="0e8a16" ;;
+			cancelled)                color="999999" ;;
+		esac
+		gh label create "agentify-state:$s" \
+			--color "$color" --description "agentify task state: $s" --force >/dev/null 2>&1 || true
+	done
 }
 
 task_backend_task_link() {

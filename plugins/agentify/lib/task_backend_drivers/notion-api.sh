@@ -165,7 +165,12 @@ task_backend_task_update() {
 	jq -n --arg s "$state" '{properties: {State: {select: {name: $s}}}}' \
 		| notion__api PATCH "pages/${ref}" -d @- >/dev/null
 	if [ -n "$comment" ]; then
-		jq -n --arg c "$comment" '{parent: {page_id: "'"$ref"'"}, rich_text: [{type: "text", text: {content: $c}}]}' \
+		# H12 fix: route $ref through `--arg` rather than shell interpolation
+		# into the jq program string. The old form was a JSON-injection
+		# vector if $ref ever became externally-sourced (e.g. a forwarded
+		# pageid carrying `","x":"…` would break out of the parent object).
+		jq -n --arg p "$ref" --arg c "$comment" \
+			'{parent: {page_id: $p}, rich_text: [{type: "text", text: {content: $c}}]}' \
 			| notion__api POST "comments" -d @- >/dev/null
 	fi
 }

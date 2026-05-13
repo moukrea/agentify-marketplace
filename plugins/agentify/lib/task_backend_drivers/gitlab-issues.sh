@@ -111,7 +111,12 @@ task_backend_task_list() {
 	local plan_ref="${1:-}"
 	[ -z "$plan_ref" ] && { echo "gitlab-issues task_list: missing plan-ref" >&2; return 64; }
 	local proj; proj=$(gli__project) || return $?
-	gli__api GET "projects/${proj}/issues?labels=agentify-type:Task&search=Parent+plan%3A+%21${plan_ref}&per_page=100" \
+	# F-9 fix: URI-encode plan_ref (matches the search-query encoding at
+	# line 189). Unencoded `&` or `=` in the ref would break the query and
+	# silently return the wrong issue set.
+	local plan_ref_enc
+	plan_ref_enc=$(printf '%s' "$plan_ref" | jq -sRr @uri)
+	gli__api GET "projects/${proj}/issues?labels=agentify-type:Task&search=Parent+plan%3A+%21${plan_ref_enc}&per_page=100" \
 		| jq '[.[] | {id: .iid, title: .title, state: .state}]'
 }
 
@@ -128,14 +133,50 @@ task_backend_task_update() {
 		echo "gitlab-issues task_update: unknown state $state" >&2; return 64
 	fi
 	local proj; proj=$(gli__project) || return $?
-	local event="reopen"
+
+	# H14 fix: state-machine repair. The original code:
+	#   * always set state_event=reopen for non-terminal states even on
+	#     already-open issues, bumping updated_at and polluting audit
+	#     trails;
+	#   * never removed the stale `agentify-state:*` label, so transitions
+	#     accumulated conflicting labels on the same issue.
+	# Fix: GET the issue first to read current state + labels; only set
+	# state_event when the open/closed bit actually needs to flip; pass
+	# both remove_labels (every agentify-state:* except the new one) and
+	# add_labels (the new state) so GitLab applies them atomically.
+	local current
+	current=$(gli__api GET "projects/${proj}/issues/${ref}") || return $?
+	local current_state remove_labels add_labels event=""
+	current_state=$(printf '%s' "$current" | jq -r '.state')
+	# Build a comma-separated list of agentify-state:* labels currently
+	# on the issue that are NOT the new state.
+	remove_labels=$(printf '%s' "$current" | jq -r --arg s "$state" '
+		[.labels[]? | select(startswith("agentify-state:") and . != ("agentify-state:" + $s))]
+		| join(",")
+	')
+	add_labels="agentify-state:${state}"
+
 	case "$state" in
-	done|cancelled) event="close" ;;
+		done|cancelled)
+			[ "$current_state" = "opened" ] && event="close"
+			;;
+		*)
+			[ "$current_state" = "closed" ] && event="reopen"
+			;;
 	esac
-	gli__api PUT "projects/${proj}/issues/${ref}" \
-		-d "$(jq -n --arg e "$event" --arg s "$state" '{state_event: $e, add_labels: ("agentify-state:" + $s)}')"
+
+	local payload
+	payload=$(jq -cn \
+		--arg e "$event" \
+		--arg rm "$remove_labels" \
+		--arg add "$add_labels" \
+		'{add_labels: $add}
+		 | (if $rm != "" then .remove_labels = $rm else . end)
+		 | (if $e != ""  then .state_event = $e  else . end)')
+	gli__api PUT "projects/${proj}/issues/${ref}" -d "$payload"
+
 	if [ -n "$comment" ]; then
-		jq -n --arg b "$comment" '{body: $b}' \
+		jq -cn --arg b "$comment" '{body: $b}' \
 			| gli__api POST "projects/${proj}/issues/${ref}/notes" -d @-
 	fi
 }

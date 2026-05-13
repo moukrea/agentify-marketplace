@@ -34,28 +34,45 @@ if [ -z "$dir" ] || [ ! -d "$dir" ]; then
 	exit 2
 fi
 
-# Extract the first fenced JSON block from each audit doc. Each audit
-# embeds one such block conforming to finding-schema.json.
+# Extract ALL fenced JSON blocks from each audit doc (H18 fix: the old
+# code's `exit` on the first closing fence captured only the first block
+# per file and missed any subsequent ones — and any ```` ``` ```` inside
+# the JSON itself ended the parse early). New awk state-machine walks
+# every block, emits each into its own .Nfile so the aggregator picks up
+# all of them.
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
+shopt -s nullglob
 for f in "$dir"/*.md; do
 	[ -f "$f" ] || continue
 	# Skip the rollup itself.
 	[[ "$(basename "$f")" = "trends.md" ]] && continue
-	awk '
-		BEGIN { inblock = 0 }
-		/^```json[[:space:]]*$/ { inblock = 1; next }
-		/^```[[:space:]]*$/      { if (inblock) { exit } }
-		inblock { print }
-	' "$f" >"$tmp/$(basename "$f").json"
-	if ! jq empty "$tmp/$(basename "$f").json" >/dev/null 2>&1; then
-		rm -f "$tmp/$(basename "$f").json"
-	fi
+	awk -v outbase="$tmp/$(basename "$f")" '
+		BEGIN { inblock = 0; idx = 0 }
+		/^```json[[:space:]]*$/ { inblock = 1; idx = idx + 1; out = outbase "." idx ".json"; next }
+		/^```[[:space:]]*$/ { if (inblock) { inblock = 0; close(out); out = "" } else { next }; next }
+		inblock && out != "" { print >> out }
+	' "$f"
+	# Validate each extracted block; drop non-JSON.
+	for blk in "$tmp/$(basename "$f")."*.json; do
+		[ -f "$blk" ] || continue
+		if ! jq empty "$blk" >/dev/null 2>&1; then
+			rm -f "$blk"
+		fi
+	done
 done
+shopt -u nullglob
 
-# Aggregate.
-jq -n --slurpfile audits "$tmp"/*.json --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+# Aggregate. H19 fix: the prior --slurpfile glob expansion
+# (`--slurpfile audits "$tmp"/*.json`) only accepts ONE file per flag —
+# the shell expanded multiple .json files into positional args, and jq
+# interpreted the second one as the filter. With >1 audit the rollup
+# silently emitted empty totals. Use `jq -s` over `cat` instead, which
+# slurps an arbitrary count from stdin.
+audits_concat=$(cat "$tmp"/*.json 2>/dev/null)
+jq --slurp --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+	. as $audits |
 	def all_findings: [ $audits[] | .findings[]? ];
 	def by_field(f): all_findings | group_by(.[f]) | map({key: .[0][f], value: length}) | from_entries;
 	def recurring:
@@ -75,7 +92,7 @@ jq -n --slurpfile audits "$tmp"/*.json --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)
 			| .findings[]?
 		] | length)
 	}
-' >"$dir/summary.json" 2>/dev/null || {
+' <<<"$audits_concat" >"$dir/summary.json" 2>/dev/null || {
 	# Empty / no audits — emit a minimal seed.
 	jq -n --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
 		'{generated_at: $now, total: 0, by_severity: {}, by_category: {}, recurring: [], open_synthetic_findings: 0}' \
