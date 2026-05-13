@@ -40,7 +40,14 @@ gitea__api() {
 	if [ -n "${GITEA_TOKEN:-}" ]; then
 		cfg=$(mktemp)
 		chmod 600 "$cfg"
+		# H-1 fix: same xtrace-leak class as gitlab.sh. Disable xtrace
+		# around the secret-writing printf so bash -x logs don't capture
+		# the token via the printf builtin's argv tracing.
+		local _xtrace_was_on=0
+		case $- in *x*) _xtrace_was_on=1 ;; esac
+		{ set +x; } 2>/dev/null
 		printf 'header = "Authorization: token %s"\n' "$GITEA_TOKEN" >"$cfg"
+		[ "$_xtrace_was_on" = 1 ] && set -x
 		# shellcheck disable=SC2064  # expand $cfg now
 		trap "rm -f \"$cfg\"" RETURN
 	fi

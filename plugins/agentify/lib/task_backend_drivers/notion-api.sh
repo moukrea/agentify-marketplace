@@ -33,6 +33,15 @@ notion__db() {
 }
 
 notion__api() {
+	# H-1 marker (deferred to v4.4.1): the curl call below passes
+	# `-H "Authorization: Bearer $tok"` on argv. Migration to
+	# _io.sh:curl_with_token (a `-K` config file pattern) is tracked
+	# for v4.4.1.
+	# TODO(v4.4.1): route notion__api through _io.sh:curl_with_token.
+	if [ -n "${NOTION_TOKEN:-}" ] && [ -z "${AGT_NOTION_ACCEPT_ARGV_LEAK:-}" ] && [ -z "${__AGT_NOTION_WARNED:-}" ]; then
+		echo "notion-api: WARNING — bearer token reaches curl argv. Migration to _io.sh:curl_with_token is deferred to v4.4.1. Set AGT_NOTION_ACCEPT_ARGV_LEAK=1 to silence this warning." >&2
+		__AGT_NOTION_WARNED=1
+	fi
 	local method="$1"; shift
 	local path="$1"; shift
 	local ep; ep=$(notion__endpoint)

@@ -50,7 +50,16 @@ gitlab__api() {
 	if [ -n "${GITLAB_TOKEN:-}" ]; then
 		cfg=$(mktemp)
 		chmod 600 "$cfg"
+		# H-1 fix: write the secret with xtrace disabled. The `-K`
+		# config file already protects from /proc/<pid>/cmdline leakage,
+		# but `printf '...%s...' "$GITLAB_TOKEN"` still puts the token
+		# on argv of the printf builtin, which `bash -x` xtrace captures
+		# and writes to stderr (often uploaded as a CI artifact).
+		local _xtrace_was_on=0
+		case $- in *x*) _xtrace_was_on=1 ;; esac
+		{ set +x; } 2>/dev/null
 		printf 'header = "PRIVATE-TOKEN: %s"\n' "$GITLAB_TOKEN" >"$cfg"
+		[ "$_xtrace_was_on" = 1 ] && set -x
 		# shellcheck disable=SC2064  # expand $cfg now, not at trap-time
 		trap "rm -f \"$cfg\"" RETURN
 	fi

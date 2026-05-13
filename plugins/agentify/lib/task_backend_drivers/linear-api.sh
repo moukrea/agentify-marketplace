@@ -33,6 +33,15 @@ linear__team_key() {
 }
 
 linear__graphql() {
+	# H-1 marker (deferred to v4.4.1): the curl call below passes
+	# `-H "Authorization: $tok"` on argv. Migration to
+	# _io.sh:curl_with_token (a `-K` config file pattern) is tracked
+	# for v4.4.1.
+	# TODO(v4.4.1): route linear__graphql through _io.sh:curl_with_token.
+	if [ -n "${LINEAR_API_KEY:-}" ] && [ -z "${AGT_LINEAR_ACCEPT_ARGV_LEAK:-}" ] && [ -z "${__AGT_LINEAR_WARNED:-}" ]; then
+		echo "linear-api: WARNING — API key reaches curl argv. Migration to _io.sh:curl_with_token is deferred to v4.4.1. Set AGT_LINEAR_ACCEPT_ARGV_LEAK=1 to silence this warning." >&2
+		__AGT_LINEAR_WARNED=1
+	fi
 	# $1: query, rest: --arg name value pairs to inject into a json body
 	local query="$1"; shift
 	local ep; ep=$(linear__endpoint)

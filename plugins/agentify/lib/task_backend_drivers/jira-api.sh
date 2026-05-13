@@ -67,6 +67,18 @@ jira__auth() {
 }
 
 jira__api() {
+	# H-1 marker (deferred to v4.4.1): the curl call below passes
+	# `-u "<email>:<token>"` (basic-auth) on argv. The token leaks via
+	# /proc/<pid>/cmdline and `bash -x` xtrace. Migration to a `-K`
+	# config-file form is non-trivial because Jira uses basic auth
+	# (email + token, base64-encoded by curl) rather than a single
+	# header; the migration is tracked for v4.4.1.
+	# TODO(v4.4.1): route jira__api through _io.sh:curl_with_token
+	# after extending _io.sh to support basic-auth refs.
+	if [ -n "${JIRA_API_TOKEN:-}" ] && [ -z "${AGT_JIRA_ACCEPT_ARGV_LEAK:-}" ] && [ -z "${__AGT_JIRA_WARNED:-}" ]; then
+		echo "jira-api: WARNING — basic-auth credentials reach curl argv. Migration to _io.sh:curl_with_token is deferred to v4.4.1. Set AGT_JIRA_ACCEPT_ARGV_LEAK=1 to silence this warning." >&2
+		__AGT_JIRA_WARNED=1
+	fi
 	# $1 method, $2 path (relative to /rest/api/3), stdin or -d for body
 	local method="$1"; shift
 	local path="$1"; shift

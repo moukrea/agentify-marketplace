@@ -32,6 +32,15 @@ gli__token() {
 }
 
 gli__api() {
+	# H-1 marker (deferred to v4.4.1): the curl call below passes
+	# `-H "PRIVATE-TOKEN: $tok"` on argv. Migration to
+	# _io.sh:curl_with_token (a `-K` config file pattern) is tracked
+	# for v4.4.1.
+	# TODO(v4.4.1): route gli__api through _io.sh:curl_with_token.
+	if [ -n "${GITLAB_TOKEN:-}" ] && [ -z "${AGT_GITLAB_ISSUES_ACCEPT_ARGV_LEAK:-}" ] && [ -z "${__AGT_GITLAB_ISSUES_WARNED:-}" ]; then
+		echo "gitlab-issues: WARNING — token reaches curl argv. Migration to _io.sh:curl_with_token is deferred to v4.4.1. Set AGT_GITLAB_ISSUES_ACCEPT_ARGV_LEAK=1 to silence this warning." >&2
+		__AGT_GITLAB_ISSUES_WARNED=1
+	fi
 	local method="$1"; shift
 	local path="$1"; shift
 	local ep; ep=$(gli__endpoint)
