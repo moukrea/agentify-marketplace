@@ -33,13 +33,16 @@ DB row, Linear issue with custom label).
    `pinned-practices.json`) for unadopted practice recommendations.
 3. Present a numbered menu of candidate motivations.
 4. The maintainer selects a candidate (or types a free-form title).
-5. The skill drafts Context / Decision / Consequences using
-   `plugins/agentify/templates/lifecycle/charter.md.template`'s ADR
-   sister format (a small markdown stub the skill assembles inline —
-   the marketplace's `decisions/TEMPLATE.md` is referenced for
-   structural guidance).
+5. The skill copies the marketplace's canonical ADR template
+   (`decisions/TEMPLATE.md` — post-C12 it ships with required Context,
+   Decision, Consequences, Alternatives Considered, and References
+   sections). The skill MUST fill in all five sections; partially
+   filled ADRs are rejected on the way out.
 6. Status defaults to `proposed`. The maintainer promotes to
-   `accepted` in a follow-up commit.
+   `accepted` in a follow-up commit. The /mkt-decide skill on the
+   marketplace performs equivalent flow at marketplace scope; both
+   skills share the same TEMPLATE.md so ADR shape is consistent across
+   tiers (per ADR 0003).
 
 ## Linking
 

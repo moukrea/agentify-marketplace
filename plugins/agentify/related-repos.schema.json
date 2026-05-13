@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/moukrea/agentify-marketplace/main/plugins/agentify/related-repos.schema.json",
+  "title": "agentify-related-repos",
+  "description": "Output schema for plugins/agentify/lib/fleet_discover.sh. Written to <path_root>/related-repos.json. Peers are canonicalized (lowercase host, no trailing slash, no .git suffix, SSH->HTTPS, http->https on well-known forge hosts) and deduplicated before writing.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "discovered_at", "peers"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 2
+    },
+    "discovered_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "fleet_name": {
+      "type": ["string", "null"],
+      "description": "Group identifier from agentify.config.json:.fleet.group_name, or null when unset."
+    },
+    "peers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["url"],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Canonical repository URL (post-canonicalization)."
+          },
+          "owner": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "source_provider": {
+            "type": "string",
+            "enum": ["file", "github-org", "gitlab-group", "homebrew-tap", "apt-repo", "rpm-repo", "browser"]
+          },
+          "first_seen_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "partial": {
+          "type": "boolean",
+          "description": "True if any provider in the discovery chain failed; partial output should be treated as advisory rather than authoritative."
+        }
+      }
+    }
+  }
+}

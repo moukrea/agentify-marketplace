@@ -50,5 +50,9 @@ decision took remains auditable.
 - Every answer that changes the PRD body must include a one-line
   rationale, so a future maintainer can understand *why* the wording
   is what it is.
-- When the user defers a question, mark it `deferred:<reason>` in the
-  PRD's Open Questions section rather than dropping it silently.
+- When the user defers a question, write the entry into
+  `clarifications.md`'s `## Deferred` table (template:
+  `plugins/agentify/templates/lifecycle/clarifications.md.template`)
+  AND mirror it into the PRD's `## Open Questions` section so it
+  survives into `agt-plan`. Both files are required so neither the
+  PRD nor the clarify trail silently drops the question.

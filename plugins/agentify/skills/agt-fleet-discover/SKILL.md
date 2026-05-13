@@ -33,8 +33,11 @@ fleet membership.
 ## Execution
 
 The skill shells out to `plugins/agentify/lib/fleet_discover.sh` for
-each configured provider, unions the results, and writes the schema-v2
-`related-repos.json` per `AGENTIFY.md §3.3.9`.
+each configured provider, unions the results, deduplicates by canonical
+URL (lowercase host, strip trailing `/` and `.git`, SSH→HTTPS, http→https
+for known forges; see ADR 0006 + C6 fix), and writes the schema-v2
+`related-repos.json` conforming to
+[`plugins/agentify/related-repos.schema.json`](../../related-repos.schema.json).
 
 ## Output
 
