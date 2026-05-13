@@ -1,5 +1,6 @@
 ---
-description: Drive the AGENTIFY revise/review loop end-to-end (LOOP_PROMPT.md). Subcommands. start — enter the in-session loop. status — print loop state. stop — gracefully exit and write session summary.
+name: agt-loop
+description: Drive the AGENTIFY revise/review loop end-to-end. Subcommands — `start` enters the in-session loop, `status` prints the loop state, `stop` gracefully exits and writes a session summary.
 allowed-tools: Read Edit Write Bash Agent
 ---
 

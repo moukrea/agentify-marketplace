@@ -39,3 +39,32 @@ Commit to four self-dogfooding invariants:
   ADR ledger to onboard, without reading the entire commit history.
 - Drift between plugin promise and marketplace reality surfaces in the
   next nightly audit, not at a customer's incident postmortem.
+
+## Alternatives Considered
+
+1. **Separate dogfood repo (`agentify-dogfood`).** Rejected: makes the
+   "does the marketplace practise what it preaches?" question harder
+   to answer because the answer lives in a different commit graph.
+   The in-tree dogfood (Tier 0 hosts `prds/0001-three-tier-architecture/`)
+   surfaces drift in the same diff a reviewer is already reading.
+2. **No dogfood; trust the maintainer.** Rejected: this is the exact
+   failure mode the marketplace audits for in OTHER repos. Eating our
+   own dog food keeps the maintainer honest.
+3. **Dogfood only the lifecycle, not the full audit cycle.** Rejected:
+   audit is the most consequential surface (it produces synthetic
+   findings that drive changes); not dogfooding it leaves the highest-
+   stakes loop unverified.
+
+Note: invariant #3 (the headless `/mkt-self-improve` run) currently
+points at `audit-trend.yml`, which is the aggregation pass, not the
+finding-production pass. C13 ships a stub `self-improve.yml` that
+will become the real headless runner once Claude Code Action stabilises.
+
+## References
+
+- `prds/0001-three-tier-architecture/` (the dogfood artifact set).
+- `.claude/skills/mkt-self-improve/SKILL.md` (the audit producer).
+- `plugins/agentify/lib/audit_aggregate.sh` (the rollup, scheduled by
+  `audit-trend.yml`).
+- ADR 0001, 0003, 0007 (the three architectural decisions this dogfood
+  exercises end-to-end).

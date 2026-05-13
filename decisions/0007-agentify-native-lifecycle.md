@@ -49,3 +49,39 @@ control-systems-before-autonomy thesis).
   remains agentify's, not external.
 - The lifecycle skills are backend-agnostic via the task-backend
   abstraction (ADR 0004); markdown is the zero-config default.
+
+## Alternatives Considered
+
+1. **Adopt Spec Kit (Anthropic's first-party lifecycle framework).**
+   Rejected: hard-coupling to Spec Kit means tracking its release
+   cadence, surfacing its artifact-naming choices (`spec/`, `task/`,
+   distinct from agentify's `prds/`), and re-tooling the lifecycle
+   skills every time Spec Kit makes a breaking change. The
+   benefits-of-coupling don't beat the costs-of-coupling for a
+   marketplace that already prefers small, owned bash.
+2. **Adopt OpenSpec.** Same generic objection as Spec Kit; OpenSpec's
+   markdown-first contract maps closely to our markdown task-backend
+   driver, but its phase model is a strict subset of ours (no charter
+   phase, no brainstorm) and we'd lose the agentify-native phases.
+3. **Adopt AgentSpec.** Rejected for the same reason — the framework
+   targets agent-instruction generation, not the full charter →
+   implement lifecycle the dogfood PRD exercises.
+4. **Adopt BMAD (Business-driven Method for Agentic Design).**
+   Rejected: heavier process model than the eight-phase agentify
+   lifecycle; designed for product teams, not individual contributors
+   running solo on a Claude Code session.
+5. **Adopt Backlog++.** Rejected: focuses on ticket-shape and
+   workflow, which we already abstract through task-backend (ADR 0004).
+   The lifecycle layer sits *above* the ticket shape.
+6. **No lifecycle layer at all — just `/<p>-implement`.** Rejected:
+   real teams need a brain-stem upstream of implementation. The PRD
+   dogfood (`prds/0001-three-tier-architecture/`) is the proof: the
+   plan that produced THIS release used the lifecycle layer it ships.
+
+## References
+
+- `plugins/agentify/skills/agt-{charter,brainstorm,prd,clarify,plan,tasks,implement}/SKILL.md`.
+- `plugins/agentify/templates/lifecycle/` (5 templates).
+- `prds/0001-three-tier-architecture/` (dogfood artifact).
+- ADR 0004 (task-backend abstraction; the lifecycle's storage layer).
+- Adversarial review B-8 (lifecycle-conformance gate repair, C4).

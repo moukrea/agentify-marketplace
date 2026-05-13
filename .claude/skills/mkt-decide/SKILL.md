@@ -16,9 +16,18 @@ Interactive (or programmatic via `/mkt-feedback-triage`) ADR drafting.
 
 ## Output
 
-`decisions/NNNN-<slug>.md` based on `decisions/TEMPLATE.md`.
-Increment NNNN to the next free four-digit number; append a row to
-`decisions/INDEX.md` above the `## Authoring` section.
+`decisions/NNNN-<slug>.md` copied verbatim from `decisions/TEMPLATE.md`,
+with the title and four required sections filled in. After C12, the
+template now includes `## Alternatives Considered` and `## References`
+as required sections — the skill MUST populate both before committing.
+
+Number selection: acquire a file lock on `decisions/.lock` (via
+`flock`), enumerate existing `decisions/[0-9][0-9][0-9][0-9]-*.md`,
+take max+1 zero-padded to four digits, release the lock. Retry once
+on filename collision (e.g. another author also took the same number
+between the lock release and the write). Append a row to
+`decisions/INDEX.md` above the `## Authoring` section, formatted as
+`| [NNNN](./NNNN-slug.md) | <title> | proposed | YYYY-MM-DD |`.
 
 ## Drafting flow
 

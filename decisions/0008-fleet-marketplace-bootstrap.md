@@ -42,3 +42,25 @@ templates from `plugins/agentify/templates/fleet-marketplace/`:
 - The skill explicitly does **not** create a Tier-3 (sub-fleet)
   marketplace; nesting beyond Tier 2 is out of scope until evidence
   demonstrates the need.
+
+## Alternatives Considered
+
+1. **Enforce a single global marketplace; reject fleets.** Rejected:
+   private/internal forks of the marketplace exist in practice; not
+   accommodating them means those teams build their own scaffolding
+   off-tree and drift from the upstream conventions.
+2. **Manual fleet-marketplace authorship (curl the templates, edit
+   by hand).** Rejected: the placeholder substitution + template
+   wiring is exactly the kind of repetitive correctness work that
+   bootstrap skills eliminate. Manual authorship guarantees drift
+   between fleets.
+3. **Tier-3 sub-fleet marketplaces (fleets-of-fleets).** Rejected
+   (this release): no evidence anyone needs nesting beyond Tier 2.
+   Revisit if a real customer requests it.
+
+## References
+
+- `.claude/skills/mkt-fleet-bootstrap/SKILL.md`.
+- `plugins/agentify/templates/fleet-marketplace/` (5 templates).
+- ADR 0003 (three-tier architecture; defines Tier 2's place).
+- ADR 0006 (peer-discovery; the prerequisite for knowing fleet membership).

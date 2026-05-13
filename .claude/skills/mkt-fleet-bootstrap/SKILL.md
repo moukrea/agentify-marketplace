@@ -75,8 +75,12 @@ target repos.
   glab error verbatim and exit non-zero.
 - `peers-file` malformed → reject before any write; ask the user to
   rerun `/<prefix>-fleet-discover`.
-- Target directory not empty → refuse to overwrite; suggest a fresh
-  directory.
+- Target directory not empty → if a stable `.agentify-fleet-bootstrap-version`
+  marker is present AND its schema version matches the running skill's
+  schema version, allow `--resume` to top up a previously-failed
+  bootstrap (re-runs idempotent render steps; never overwrites
+  user-edited files). Without the marker (or with a mismatched schema
+  version) refuse to overwrite and suggest a fresh directory.
 
 ## ADR linkage
 

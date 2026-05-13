@@ -1,6 +1,6 @@
 ---
 name: mkt-practice-evolve
-description: First-class phase of /mkt-self-improve, also invokable standalone or headless via .github/workflows/practice-evolve.yml. Watches the curated sources in plugins/agentify/conventions/sources.yaml (Anthropic / Shopify / Karpathy / Vercel / Spotify / community / AGENTS.md / MCP changelogs), distils actionable recommendations, runs per-recommendation adoption checks, and surfaces unadopted patterns as practice-drift findings + ADR drafts.
+description: Convention-evolution phase of /mkt-self-improve. Watches the curated sources in plugins/agentify/conventions/sources.yaml (Anthropic / Shopify / Karpathy / Vercel / Spotify / community / AGENTS.md / MCP changelogs), distils actionable recommendations, runs per-recommendation adoption checks, and surfaces unadopted patterns as practice-drift findings + ADR drafts.
 ---
 
 # /mkt-practice-evolve
@@ -8,18 +8,26 @@ description: First-class phase of /mkt-self-improve, also invokable standalone o
 The convention-evolution loop: turn what the production community
 publishes into ADRs the marketplace acts on.
 
+Per ADR 0009 invariant #4, this skill is **structurally a phase of
+`/mkt-self-improve`, not a sibling**. The convention-evolution loop is
+inseparable from the audit loop — invoking it via the parent skill
+keeps findings in one auditable document.
+
 ## Operation modes
 
-- **Phase of /mkt-self-improve** (default). The parent skill calls
-  this one inline; findings go into the parent's audit document.
-  Triggered by `self_improve.audit_practice_currency: true`.
-- **Standalone interactive**. A maintainer runs `/mkt-practice-evolve`
-  directly; the skill emits its own audit under
-  `audits/<ISO>-practice-evolve.md`.
-- **Headless cron**. `.github/workflows/practice-evolve.yml` runs
-  weekly; opens a PR with the new distillations + updated
-  `pinned-practices.json` + any ADR drafts when content actually
-  changed.
+- **Phase of /mkt-self-improve** (default — only first-class mode).
+  The parent skill calls this one inline; findings go into the parent's
+  audit document. Triggered by `self_improve.audit_practice_currency: true`.
+- **Headless cron** (fetch-only). `.github/workflows/practice-evolve.yml`
+  runs weekly and opens a PR with new raw fetches + updated
+  `pinned-practices.json` when sources changed. Distillation +
+  ADR-draft synthesis still requires a maintainer to invoke
+  `/mkt-self-improve` (which dispatches this skill as Phase 8). The
+  workflow's job is to keep the cache fresh, not to produce findings.
+
+Standalone interactive invocation (`/mkt-practice-evolve` outside a
+parent run) is intentionally not supported — use `/mkt-self-improve
+--only practice-evolve` to scope the parent to just this phase.
 
 ## Inputs
 

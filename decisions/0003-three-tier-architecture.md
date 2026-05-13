@@ -47,3 +47,36 @@ delegates to `/mkt-self-improve` when run in this repo.
 - Marketplace skills can evolve independently of target skills.
 - A single shared spine (git-host, task-backend, secrets,
   fleet-discovery abstractions) is reusable across all three tiers.
+
+## Alternatives Considered
+
+1. **Two-tier (marketplace + target) only.** Rejected: enterprises with
+   N>5 agentified repos in one org need a common scaffold for fleet-
+   wide conventions (shared lifecycle templates, shared ADR set, shared
+   audit rollups). Without Tier 2, every fleet member duplicates the
+   fleet-specific config in its own `agentify.config.json`.
+2. **Monorepo with marketplace, plugin, and dogfood targets co-located.**
+   Rejected: blurs the consumer/producer boundary — every change to the
+   plugin churns the dogfood targets in the same commit, making
+   bisection painful and obscuring "did this break the plugin or the
+   tenant?".
+3. **Separate repos for marketplace, plugin source, and dogfood target.**
+   Rejected: triples release-coordination overhead and forfeits the
+   in-tree dogfood story (the marketplace can't audit-itself if the
+   audit target isn't in the same repo). The current single-repo split
+   (Tier 0 hosts both plugin source AND its own dogfood at
+   `prds/0001-three-tier-architecture/`) keeps everything inspectable
+   in one diff.
+4. **Tier 2 as a separate marketplace repo per fleet, manually
+   maintained.** Rejected: the manual-curation tax is exactly what
+   `/mkt-fleet-bootstrap` automates. ADR 0008 elaborates the bootstrap
+   contract.
+
+## References
+
+- `.claude/skills/mkt-*/SKILL.md` (Tier 0 marketplace skills).
+- `plugins/agentify/skills/agt-*/SKILL.md` (Tier 1 target skills,
+  rendered with configurable prefix).
+- `plugins/agentify/templates/fleet-marketplace/` (Tier 2 templates).
+- ADR 0008 (fleet-marketplace bootstrap contract; the Tier 2 spec).
+- ADR 0009 (marketplace self-dogfooding; how Tier 0 audits itself).

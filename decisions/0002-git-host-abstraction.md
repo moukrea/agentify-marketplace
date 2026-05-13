@@ -41,3 +41,33 @@ Driver resolution precedence: `AGENTIFY_GIT_HOST_DRIVER` env var >
 - Marketplace-side workflows (`audit-trend.yml`, `feedback-triage.yml`,
   `practice-evolve.yml`, `release.yml`, `changelog-pr.yml`) all use the
   dispatcher so they are host-portable from day one.
+
+## Alternatives Considered
+
+1. **Hard-code `gh` everywhere; deprecate non-GitHub support.** Rejected
+   because the May 2026 user research showed measurable adoption from
+   GitLab/self-hosted Gitea/Codeberg/Forgejo tenants; locking them out
+   permanently would forfeit those communities.
+2. **Use `libgit2` / `pygit2` bindings as the abstraction layer.**
+   Rejected because the marketplace is bash-first by convention and
+   binding a non-bash runtime would balloon install dependencies. The
+   verbs we need (issue/PR/release/file-fetch) are mostly REST anyway,
+   not git-plumbing.
+3. **Interface + per-driver Python plugins.** Same dependency objection
+   as (2); plus Python plugins drift faster than bash drivers and
+   require a separate test harness.
+4. **Adopt an existing third-party abstraction (`hub`, `glab` only).**
+   Rejected because no single CLI covers every host the marketplace
+   targets, and depending on `gh`/`glab` simultaneously inflates the
+   driver-install surface that operators already complained about.
+
+## References
+
+- `plugins/agentify/lib/git_host.sh` (dispatcher).
+- `plugins/agentify/lib/git_host_drivers/` (5 drivers in this release).
+- ADR 0005 (orthogonal secrets layer; drivers consume tokens via that).
+- Anthropic 2026 Agentic Coding Trends Report
+  (https://www.anthropic.com/engineering/agentic-coding-trends-2026,
+  fetched 2026-05-12).
+- Adversarial review H1–H4, H6, F-7–F-11 (driver-correctness items
+  that prompted the C8 hardening pass).

@@ -23,3 +23,22 @@ we are explicitly *not* doing. One paragraph max.
 Bullet what changes (positive and negative) as a result. Note any
 follow-up work this decision creates (e.g., new abstraction to build,
 schema to extend, migration to author).
+
+## Alternatives Considered
+
+Enumerate the alternatives that were weighed and rejected, with a
+one-sentence rejection rationale each. The bar: a reviewer reading
+this section should understand *why this and not those*, not
+*what this is*. Avoid strawmen — every alternative listed should be
+one a competent team would actually consider.
+
+1. **<Alternative A>.** Rejected because: <reason>.
+2. **<Alternative B>.** Rejected because: <reason>.
+3. **<Alternative C>.** Rejected because: <reason>.
+
+## References
+
+- Cross-references to related ADRs, audits, practice distillations,
+  PRs, or external docs that informed the decision. Use file:line
+  references for in-tree pointers and URL + retrieval-date for
+  external sources (matches the audit-finding contract).
