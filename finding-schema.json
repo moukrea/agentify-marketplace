@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/moukrea/agentify-marketplace/blob/main/finding-schema.json",
+  "$id": "https://raw.githubusercontent.com/moukrea/agentify-marketplace/main/finding-schema.json",
   "title": "agentify-finding",
-  "description": "Strict superset of plugins/agentify/audit-review-schema.json. Used by every audit producer in the marketplace (mkt-self-improve, mkt-feedback-triage, mkt-practice-evolve, mkt-audit-trend, feedback-ingest) as well as the existing target-side /<p>-self-improve. Every finding still requires (a) at least one fetched URL reference, (b) a falsifiable acceptance criterion, and (c) the WS-F-003 synthetic-source marker when machine-produced.",
+  "description": "Canonical schema for every machine-or-human audit finding in the marketplace (mkt-self-improve, mkt-feedback-triage, mkt-practice-evolve, mkt-audit-trend, feedback-ingest, target-side /<p>-self-improve). v2 is a BREAKING redesign of the prior plugins/agentify/audit-review-schema.json (v1): the verdict and severity vocabularies are reshaped (`ship|iterate|park|stalled|regression|failure` -> `healthy|degraded|broken`; `strategic` severity replaced by `info`), `description` is renamed to optional `details`, and several optional v1 keys (audit_inputs, caused_by_prior_revise, feedback_issue_id) are dropped from the permitted set. Existing audits/*.md files must be migrated via `bin/migrate-audits-v1-to-v2.sh` (see decisions/0001-finding-schema-unification.md). Every finding still requires (a) at least one fetched URL reference, (b) a falsifiable acceptance criterion, and (c) the WS-F-003 synthetic-source marker when machine-produced.",
   "type": "object",
   "additionalProperties": false,
   "required": [
