@@ -101,7 +101,21 @@ git_host_issue_list() {
 		labels="${labels%,}"
 	fi
 	local q="projects/${project}/issues?state=${state}&per_page=100"
-	[ -n "$labels" ] && q="${q}&labels=$(gitlab__url_encode "$labels")"
+	# H-7 fix: don't URL-encode the comma in the labels list. The
+	# GitLab API expects `labels=a,b,c` with LITERAL commas; passing
+	# `gitlab__url_encode` over the joined string turned commas into
+	# %2C, breaking label filtering entirely. Encode each label
+	# individually instead and re-join with literal commas.
+	if [ -n "$labels" ]; then
+		local _enc="" _l
+		IFS=',' read -r -a _label_arr <<<"$labels"
+		for _l in "${_label_arr[@]}"; do
+			[ -z "$_l" ] && continue
+			[ -n "$_enc" ] && _enc="${_enc},"
+			_enc="${_enc}$(gitlab__url_encode "$_l")"
+		done
+		q="${q}&labels=${_enc}"
+	fi
 	# Map GitLab fields to the GitHub-shaped schema feedback_ingest expects.
 	gitlab__api GET "$q" 2>/dev/null | jq '
 		[.[] | {
@@ -132,19 +146,26 @@ git_host_issue_label_add() {
 		echo "gitlab issue_label_add: need number and label" >&2; return 64
 	}
 	local project; project=$(gitlab__url_encode "$REPO_FLAG")
+	# H-8 fix: GitLab's issue-update API for `add_labels` accepts both
+	# a comma-joined string and a JSON array; we send an array to be
+	# consistent with `remove_labels` calls elsewhere and to dodge any
+	# future tightening of the API. Was `{add_labels: $l}` (string).
 	gitlab__api PUT "projects/${project}/issues/${number}" \
-		-d "$(jq -n --arg l "$label" '{add_labels: $l}')"
+		-d "$(jq -n --arg l "$label" '{add_labels: [$l]}')"
 }
 
 git_host_release_create() {
 	gitlab__parse_repo "$@"
 	local tag="${REST[0]:-}" name="${REST[1]:-}" notes="${REST[2]:-}"
-	[ -z "$tag" ] || [ -z "$notes" ] && {
-		echo "gitlab release_create: need tag and notes-file" >&2; return 64
+	# H-11 fix: make title (name) required across all drivers. GitHub's
+	# driver required it; gitlab/gitea silently substituted the tag,
+	# producing inconsistent /mkt-release behaviour across hosts.
+	[ -z "$tag" ] || [ -z "$name" ] || [ -z "$notes" ] && {
+		echo "gitlab release_create: need tag, title, and notes-file" >&2; return 64
 	}
 	local project; project=$(gitlab__url_encode "$REPO_FLAG")
 	jq -n --arg tag "$tag" --arg name "$name" --rawfile desc "$notes" \
-		'{tag_name: $tag, name: ($name | (if . == "" then $tag else . end)), description: $desc}' \
+		'{tag_name: $tag, name: $name, description: $desc}' \
 		| gitlab__api POST "projects/${project}/releases" -d @-
 }
 

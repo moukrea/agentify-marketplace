@@ -249,7 +249,11 @@ git_host_repo_create() {
 		echo "repo_create: need owner and name" >&2
 		return 64
 	}
-	gh repo create "${owner}/${name}" "--${vis}" --confirm
+	# H-6 fix: `gh repo create --confirm` was removed in gh v2.0 (2021)
+	# and now errors `unknown flag: --confirm`. The `--public`/`--private`/
+	# `--internal` visibility flags already imply non-interactive mode, so
+	# the --confirm flag is redundant. Drop it.
+	gh repo create "${owner}/${name}" "--${vis}"
 }
 
 # ci_status <ref> [last-n-runs=10]

@@ -123,11 +123,12 @@ git_host_issue_label_add() {
 git_host_release_create() {
 	gitea__parse_repo "$@"
 	local tag="${REST[0]:-}" name="${REST[1]:-}" notes="${REST[2]:-}"
-	[ -z "$tag" ] || [ -z "$notes" ] && {
-		echo "gitea release_create: need tag and notes-file" >&2; return 64
+	# H-11 fix: make title (name) required everywhere consistently.
+	[ -z "$tag" ] || [ -z "$name" ] || [ -z "$notes" ] && {
+		echo "gitea release_create: need tag, title, and notes-file" >&2; return 64
 	}
 	jq -n --arg tag "$tag" --arg name "$name" --rawfile body "$notes" \
-		'{tag_name: $tag, name: ($name | (if . == "" then $tag else . end)), body: $body}' \
+		'{tag_name: $tag, name: $name, body: $body}' \
 		| gitea__api POST "repos/${REPO_FLAG}/releases" -d @-
 }
 
@@ -196,6 +197,19 @@ git_host_ci_status() {
 	local ref="${REST[0]:-HEAD}" limit="${REST[1]:-10}"
 	local sha
 	sha=$(gitea__api GET "repos/${REPO_FLAG}/commits/${ref}" 2>/dev/null | jq -r '.sha // ""')
+	# H-9 fix: if the commit lookup 404s (private repo / wrong ref),
+	# $sha is empty. The H4 fix tried to fall back to "" but consumers
+	# can't distinguish a missing SHA from a real one. Fall back to
+	# `git rev-parse "$ref"` locally; if that also fails, return [] +
+	# non-zero exit so callers can detect the lookup failure.
+	if [ -z "$sha" ]; then
+		sha=$(git rev-parse --verify "$ref" 2>/dev/null || true)
+	fi
+	if [ -z "$sha" ]; then
+		echo "gitea ci_status: cannot resolve SHA for ref '$ref'" >&2
+		printf '[]\n'
+		return 1
+	fi
 	gitea__api GET "repos/${REPO_FLAG}/commits/${ref}/statuses?limit=${limit}" 2>/dev/null \
 		| jq --arg sha "$sha" '
 			[.[] | {
