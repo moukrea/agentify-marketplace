@@ -137,38 +137,147 @@ task_backend_task_update() {
 	if ! printf '%s\n' "$AGT_TASK_STATES" | tr ' ' '\n' | grep -qx -- "$state"; then
 		echo "github-projects task_update: unknown state $state" >&2; return 64
 	fi
-	# H13 fix: state-machine repair.
-	#   * `done|cancelled` close the issue.
-	#   * Any non-terminal state must REOPEN the issue first (was missing),
-	#     so a task that hit `done` and is later re-flagged `blocked` stops
-	#     leaving the GH issue closed forever.
-	#   * Remove ALL prior `agentify-state:*` labels before adding the new
-	#     one. The old code removed only the literal `agentify-state:open`,
-	#     which doesn't exist in the canonical vocabulary — every transition
-	#     therefore accumulated stale labels.
-	# The `2>/dev/null || true` swallowed gh errors (e.g. "label not found"
-	# on first run before the labels exist). Replaced with explicit label
-	# bootstrap via `gh label create --force` on demand.
+	# B-11 fix (Part 1): the prior done/cancelled branch closed the
+	# issue but NEVER cleaned stale `agentify-state:*` labels and
+	# NEVER added `agentify-state:done`/`cancelled`. C6 claimed this
+	# was fixed; only the open-state branch was actually patched.
+	# gitlab-issues.sh:159-166 got it right; github-projects didn't.
+	#
+	# Fix: move label cleanup + state-label addition OUTSIDE the case,
+	# so every transition (terminal or not) ends in a consistent label
+	# state. Plus invoke ghp__update_project_status to fire the
+	# Projects v2 GraphQL `updateProjectV2ItemFieldValue` mutation so
+	# the project board's Status column actually reflects the state
+	# (Part 2 — the original driver only managed labels, never touched
+	# the v2 Status field; the board column stayed at "Todo" forever).
 	ghp__ensure_state_labels
+	# Always: remove every stale state label, then add the new one.
+	local s
+	for s in draft ready in_progress blocked in_review done cancelled; do
+		[ "$s" = "$state" ] && continue
+		gh issue edit "$ref" --remove-label "agentify-state:$s" >/dev/null 2>&1 || true
+	done
+	gh issue edit "$ref" --add-label "agentify-state:$state" >/dev/null 2>&1 || true
+	# Now open/close as needed.
 	case "$state" in
 	done|cancelled)
-		gh issue close "$ref" --comment "${comment:-state=$state}"
+		gh issue close "$ref" --comment "${comment:-state=$state}" >/dev/null 2>&1 || true
 		;;
 	in_progress|in_review|blocked|ready|draft)
-		# Reopen the issue if it's closed; --reason completed/not_planned
-		# are fine to ignore here since we just want the open state.
 		gh issue reopen "$ref" >/dev/null 2>&1 || true
-		# Remove every agentify-state:* label currently set (idempotent;
-		# gh ignores "label not on issue").
-		local s
-		for s in draft ready in_progress blocked in_review done cancelled; do
-			[ "$s" = "$state" ] && continue
-			gh issue edit "$ref" --remove-label "agentify-state:$s" >/dev/null 2>&1 || true
-		done
-		gh issue edit "$ref" --add-label "agentify-state:$state"
-		[ -n "$comment" ] && gh issue comment "$ref" --body "$comment"
+		[ -n "$comment" ] && gh issue comment "$ref" --body "$comment" >/dev/null 2>&1 || true
 		;;
 	esac
+	# Part 2: update the Projects v2 Status field.
+	ghp__update_project_status "$ref" "$state" || true
+}
+
+# B-11 (Part 2): update the Projects v2 board's Status field via the
+# GraphQL `updateProjectV2ItemFieldValue` mutation. The current driver
+# manages labels via REST; the project board's Status column never
+# reflected state transitions because labels and Status are separate
+# concepts in Projects v2. Map canonical AGT_TASK_STATES to Status
+# option names (configurable via task_backend.github_projects.status_field_map).
+#
+# Lazy: resolves project/field/option node IDs on first call and caches
+# them in process-local vars. Tolerates failure quietly (returns 0)
+# because the label-only path remains the source of truth — Status is
+# a UX nicety on top.
+ghp__update_project_status() {
+	local ref="$1" state="$2"
+	[ -z "$ref" ] || [ -z "$state" ] && return 0
+
+	local proj; proj=$(ghp__project_owner_number) || return 0
+	local owner="${proj%%/*}" number="${proj##*/}"
+
+	# Resolve the Status option name for this canonical state.
+	# Default mapping: draft->Todo, ready->Backlog, in_progress->In Progress,
+	# blocked->Blocked, in_review->In Review, done->Done, cancelled->Cancelled.
+	# Operator can override via task_backend.github_projects.status_field_map[<state>].
+	local status_name
+	if [ -f ./agentify.config.json ]; then
+		status_name=$(jq -r --arg s "$state" \
+			'.task_backend.github_projects.status_field_map[$s] // empty' \
+			./agentify.config.json 2>/dev/null)
+	fi
+	if [ -z "$status_name" ]; then
+		case "$state" in
+		draft)       status_name="Todo" ;;
+		ready)       status_name="Backlog" ;;
+		in_progress) status_name="In Progress" ;;
+		blocked)     status_name="Blocked" ;;
+		in_review)   status_name="In Review" ;;
+		done)        status_name="Done" ;;
+		cancelled)   status_name="Cancelled" ;;
+		*) return 0 ;;
+		esac
+	fi
+
+	# Resolve project node ID (cached per-process).
+	if [ -z "${__GHP_PROJECT_ID:-}" ]; then
+		__GHP_PROJECT_ID=$(gh api graphql \
+			-f query='query($owner:String!,$number:Int!){user(login:$owner){projectV2(number:$number){id}}}' \
+			-f owner="$owner" -F number="$number" 2>/dev/null \
+			| jq -r '.data.user.projectV2.id // empty')
+		# Fallback: try organization scope.
+		if [ -z "$__GHP_PROJECT_ID" ]; then
+			__GHP_PROJECT_ID=$(gh api graphql \
+				-f query='query($owner:String!,$number:Int!){organization(login:$owner){projectV2(number:$number){id}}}' \
+				-f owner="$owner" -F number="$number" 2>/dev/null \
+				| jq -r '.data.organization.projectV2.id // empty')
+		fi
+		[ -z "$__GHP_PROJECT_ID" ] && return 0
+	fi
+
+	# Resolve Status field ID + options list (cached).
+	if [ -z "${__GHP_STATUS_FIELD_ID:-}" ]; then
+		local fields_json
+		fields_json=$(gh api graphql \
+			-f query='query($id:ID!){node(id:$id){... on ProjectV2{fields(first:50){nodes{... on ProjectV2SingleSelectField{id name options{id name}}}}}}}' \
+			-f id="$__GHP_PROJECT_ID" 2>/dev/null)
+		__GHP_STATUS_FIELD_ID=$(echo "$fields_json" | jq -r \
+			'.data.node.fields.nodes[] | select(.name == "Status") | .id // empty')
+		__GHP_STATUS_OPTIONS_JSON=$(echo "$fields_json" | jq -c \
+			'[.data.node.fields.nodes[] | select(.name == "Status") | .options[]] // []')
+		[ -z "$__GHP_STATUS_FIELD_ID" ] && return 0
+	fi
+
+	# Resolve the option ID matching status_name (case-insensitive).
+	local option_id
+	option_id=$(echo "$__GHP_STATUS_OPTIONS_JSON" \
+		| jq -r --arg n "$status_name" \
+		'.[] | select((.name | ascii_downcase) == ($n | ascii_downcase)) | .id // empty' \
+		| head -n 1)
+	[ -z "$option_id" ] && return 0
+
+	# Resolve the project ITEM id from the issue ref (URL or number).
+	# Use addProjectV2ItemById if the issue isn't yet in the project (idempotent).
+	local issue_node_id
+	issue_node_id=$(gh issue view "$ref" --json id -q .id 2>/dev/null)
+	[ -z "$issue_node_id" ] && return 0
+
+	# Get the item ID for this issue in this project.
+	local item_id
+	item_id=$(gh api graphql \
+		-f query='query($pid:ID!,$cid:ID!){node(id:$pid){... on ProjectV2{items(first:100){nodes{id content{... on Issue{id}}}}}}}' \
+		-f pid="$__GHP_PROJECT_ID" -f cid="$issue_node_id" 2>/dev/null \
+		| jq -r --arg cid "$issue_node_id" \
+		'.data.node.items.nodes[] | select(.content.id == $cid) | .id // empty' \
+		| head -n 1)
+	if [ -z "$item_id" ]; then
+		# Issue not yet in project; add it.
+		item_id=$(gh api graphql \
+			-f query='mutation($pid:ID!,$cid:ID!){addProjectV2ItemById(input:{projectId:$pid,contentId:$cid}){item{id}}}' \
+			-f pid="$__GHP_PROJECT_ID" -f cid="$issue_node_id" 2>/dev/null \
+			| jq -r '.data.addProjectV2ItemById.item.id // empty')
+		[ -z "$item_id" ] && return 0
+	fi
+
+	# Fire the Status update mutation.
+	gh api graphql \
+		-f query='mutation($pid:ID!,$iid:ID!,$fid:ID!,$oid:String!){updateProjectV2ItemFieldValue(input:{projectId:$pid,itemId:$iid,fieldId:$fid,value:{singleSelectOptionId:$oid}}){projectV2Item{id}}}' \
+		-f pid="$__GHP_PROJECT_ID" -f iid="$item_id" -f fid="$__GHP_STATUS_FIELD_ID" \
+		-f oid="$option_id" >/dev/null 2>&1 || true
 }
 
 # Lazy bootstrap of the agentify-state:* label set. Idempotent: gh label
