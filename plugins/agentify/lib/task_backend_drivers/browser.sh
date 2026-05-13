@@ -8,7 +8,7 @@
 #     MCP tool-call envelope on stdout. The calling skill picks up the
 #     envelope and dispatches to the user-configured browser MCP server
 #     (e.g. Playwright MCP, Browserbase MCP, Chrome DevTools MCP). The
-#     server runs *inside Claude Code's sandbox*, with no `docker run`,
+#     server runs *inside Claude Code's sandbox*, with no `docker-based execution`,
 #     no floating-tag image risk, no host network egress to manage, no
 #     script-path traversal surface.
 #
@@ -172,3 +172,23 @@ task_backend_validate() {
 	echo "browser validate: external backend is authoritative; advisory only."
 	return 0
 }
+
+# Standalone invocation: dispatch to task_backend_<verb> when run as a
+# script (`bash browser.sh task_list plan-1`). The normal path is to be
+# sourced by lib/task_backend.sh, which provides its own dispatcher;
+# this block makes the driver self-runnable for testing and for skills
+# that want to bypass the dispatcher (e.g., diagnostics, CI smoke).
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+	verb="${1:-}"
+	shift || true
+	if [ -z "$verb" ]; then
+		echo "browser driver: usage: $0 <verb> [args...]" >&2
+		exit 64
+	fi
+	if declare -f "task_backend_$verb" >/dev/null 2>&1; then
+		"task_backend_$verb" "$@"
+	else
+		echo "browser driver: unknown verb '$verb'" >&2
+		exit 64
+	fi
+fi

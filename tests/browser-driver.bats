@@ -44,6 +44,8 @@ teardown() {
   }
 }
 EOF
+	# B-15 companion: invoke via the standalone CLI dispatcher the
+	# driver now exposes (`bash browser.sh <verb> args...`).
 	CLAUDECODE=1 run bash "$TB_BROWSER" task_list plan-1
 	assert_status 0
 	echo "$output" | assert_jq -e '.mcp_call.server == "playwright"'
@@ -94,10 +96,11 @@ EOF
 	run bash -c '
 		unset CLAUDECODE
 		. "'"$FD_BROWSER"'"
-		fleet_provider_run "$(jq -c .fleet.discovery.providers[0] agentify.config.json)"
+		fleet_provider_run "$(jq -c .fleet.discovery.providers[0] agentify.config.json)" 2>/dev/null
 	'
 	[ "$status" -eq 0 ]
-	# Headless: emits empty stable shape.
+	# Headless: emits empty stable shape. Stderr warning is redirected
+	# so the captured $output is pure JSON.
 	echo "$output" | assert_jq -e 'type == "array" and length == 0'
 }
 

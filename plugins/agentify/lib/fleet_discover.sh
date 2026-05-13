@@ -17,7 +17,10 @@
 set -euo pipefail
 
 FLEET_LIB_DIR="${FLEET_LIB_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
-FLEET_PROVIDERS_DIR="${FLEET_LIB_DIR}/fleet_discover_providers"
+# Honor an explicit FLEET_PROVIDERS_DIR for testability (bats fixtures
+# point this at a sandbox with stub providers); default to LIB_DIR's
+# co-located providers directory.
+FLEET_PROVIDERS_DIR="${FLEET_PROVIDERS_DIR:-${FLEET_LIB_DIR}/fleet_discover_providers}"
 
 fleet_discover__load_providers_from_config() {
 	local cfg="${1:-./agentify.config.json}"
@@ -52,9 +55,26 @@ fleet_discover() {
 	fi
 
 	# For each provider, dispatch to its driver and accumulate.
+	#
+	# B-15 fix: providers may emit one of two output shapes:
+	#   * array of peer objects (static providers: file, github-org,
+	#     gitlab-group, homebrew-tap, apt-repo, rpm-repo)
+	#   * object `{peers: [...], mcp_call: {...}}` (interactive
+	#     providers like browser, where the actual discovery happens
+	#     via an MCP server the calling skill must dispatch)
+	#
+	# The old dispatcher did `$a + $b` unconditionally; an object
+	# provider output produced jq error "array and object cannot be
+	# added" → set -e aborted the whole dispatcher mid-loop, taking
+	# every subsequent provider with it. Option B: case-analyse on
+	# `jq -c 'type'`. Object output has its `.peers` extracted for the
+	# array merge and its `.mcp_call` (if present) accumulated into a
+	# separate envelopes array, surfaced as `_meta.pending_mcp_envelopes`
+	# in the final output for the skill to dispatch.
 	local count
 	count=$(printf '%s' "$providers" | jq 'length')
 	local accumulated='[]'
+	local pending_envelopes='[]'
 	for ((i = 0; i < count; i++)); do
 		local entry type driver
 		entry=$(printf '%s' "$providers" | jq -c ".[$i]")
@@ -66,12 +86,28 @@ fleet_discover() {
 		fi
 		# shellcheck source=/dev/null
 		. "$driver"
-		local provider_out
+		local provider_out provider_kind peers_only mcp_call
 		if ! provider_out=$(fleet_provider_run "$entry" 2>/dev/null); then
 			echo "fleet_discover: provider $type failed; skipping" >&2
 			continue
 		fi
-		accumulated=$(jq -cn --argjson a "$accumulated" --argjson b "$provider_out" '$a + $b')
+		provider_kind=$(printf '%s' "$provider_out" | jq -r 'type' 2>/dev/null || echo "invalid")
+		case "$provider_kind" in
+		array)
+			accumulated=$(jq -cn --argjson a "$accumulated" --argjson b "$provider_out" '$a + $b')
+			;;
+		object)
+			peers_only=$(printf '%s' "$provider_out" | jq -c '.peers // []')
+			accumulated=$(jq -cn --argjson a "$accumulated" --argjson b "$peers_only" '$a + $b')
+			mcp_call=$(printf '%s' "$provider_out" | jq -c '.mcp_call // empty')
+			if [ -n "$mcp_call" ]; then
+				pending_envelopes=$(jq -cn --argjson e "$pending_envelopes" --argjson c "$mcp_call" '$e + [$c]')
+			fi
+			;;
+		*)
+			echo "fleet_discover: provider $type emitted unexpected JSON type ${provider_kind:-<unknown>}; skipping" >&2
+			;;
+		esac
 	done
 
 	# H10 fix: canonicalize URLs BEFORE dedup. `unique_by(.url)` is byte-
@@ -85,6 +121,7 @@ fleet_discover() {
 	#     gitlab.com, codeberg.org) where http is just a downgrade.
 	jq -n \
 		--argjson peers "$accumulated" \
+		--argjson envelopes "$pending_envelopes" \
 		--arg fleet "${fleet_name:-}" \
 		--arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
 		'
@@ -118,7 +155,13 @@ fleet_discover() {
 				| map(.url |= canon_url)
 				| unique_by(.url)
 			)
-		}'
+		}
+		# B-15 companion: surface MCP-call envelopes from interactive
+		# providers so the calling skill can dispatch them. Only emit
+		# _meta when there is something to consume.
+		| (if ($envelopes | length) > 0
+			then . + {_meta: {pending_mcp_envelopes: $envelopes}}
+			else . end)'
 }
 
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then

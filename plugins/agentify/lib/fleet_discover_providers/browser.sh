@@ -2,7 +2,7 @@
 # fleet_discover_providers/browser.sh — discover fleet peers from a portal
 # that has neither an API nor a static feed. Redesigned in C7 (per the
 # adversarial review) to leverage Claude Code's native browser capability
-# via the two-mode MCP pattern; the prior `docker run` approach shipped
+# via the two-mode MCP pattern; the prior docker-based approach shipped
 # a floating-tag node:lts-bookworm with no network restriction, no caps
 # dropped, swallowed stderr, and an AGENTIFY_SCRIPT path-traversal
 # vector. Those concerns dissolve when discovery runs inside the user's
