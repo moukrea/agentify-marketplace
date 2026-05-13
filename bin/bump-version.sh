@@ -15,7 +15,10 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Default REPO_ROOT to the script's parent dir; honor an explicit
+# override (AGT_BUMP_REPO_ROOT) for testability — bats fixtures need
+# to point at a sandbox repo without copying the script.
+REPO_ROOT="${AGT_BUMP_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 PLUGIN_MANIFEST="$REPO_ROOT/plugins/agentify/.claude-plugin/plugin.json"
 MARKETPLACE_MANIFEST="$REPO_ROOT/.claude-plugin/marketplace.json"
 
@@ -117,16 +120,48 @@ if [ "$current" != "$new_version" ]; then
 	fi
 fi
 
-# Stage both writes into tempfiles first; only mv after both succeed.
-# If either jq fails, the tree stays consistent.
+# B-3 fix: the old sequence wrote both tempfiles then did two
+# sequential `mv` calls; if the second mv failed (FS full, permission,
+# interruption), the first mv had already overwritten plugin.json
+# while marketplace.json stayed at the old version. Worse, the EXIT
+# trap on tempfiles was disarmed BEFORE the second mv. Result: a torn
+# tree with no way to detect the partial write.
+#
+# Snapshot-and-rollback transaction: copy both manifests to per-pid
+# `.bak.<pid>` files BEFORE any write, install an EXIT/INT/TERM/HUP
+# trap that restores from .bak on any abnormal exit, then disarm the
+# trap + remove .bak only after BOTH mvs succeed. Inside the
+# transaction, `set -e` causes any jq or mv failure to fall into the
+# trap, restoring atomicity.
+plugin_bak="${PLUGIN_MANIFEST}.bak.$$"
+marketplace_bak="${MARKETPLACE_MANIFEST}.bak.$$"
+cp -p "$PLUGIN_MANIFEST" "$plugin_bak"
+cp -p "$MARKETPLACE_MANIFEST" "$marketplace_bak"
+
 plugin_tmp=$(mktemp); marketplace_tmp=$(mktemp)
-trap 'rm -f "$plugin_tmp" "$marketplace_tmp"' EXIT
+# shellcheck disable=SC2064
+trap '
+	rc=$?
+	if [ -f "'"$plugin_bak"'" ]; then
+		cp -p "'"$plugin_bak"'" "'"$PLUGIN_MANIFEST"'" 2>/dev/null || true
+		rm -f "'"$plugin_bak"'"
+	fi
+	if [ -f "'"$marketplace_bak"'" ]; then
+		cp -p "'"$marketplace_bak"'" "'"$MARKETPLACE_MANIFEST"'" 2>/dev/null || true
+		rm -f "'"$marketplace_bak"'"
+	fi
+	rm -f "'"$plugin_tmp"'" "'"$marketplace_tmp"'" 2>/dev/null || true
+	exit "$rc"
+' EXIT INT TERM HUP
+
 jq --arg v "$new_version" '.version = $v' "$PLUGIN_MANIFEST" >"$plugin_tmp"
 jq --arg v "$new_version" '.plugins[0].version = $v' "$MARKETPLACE_MANIFEST" >"$marketplace_tmp"
-# At this point both rewrites succeeded; commit atomically.
 mv "$plugin_tmp" "$PLUGIN_MANIFEST"
 mv "$marketplace_tmp" "$MARKETPLACE_MANIFEST"
-trap - EXIT
+
+# Transaction committed; disarm rollback trap and remove snapshots.
+trap - EXIT INT TERM HUP
+rm -f "$plugin_bak" "$marketplace_bak"
 
 # Stage the changes; the caller (or /mkt-release) commits + tags.
 git add "$PLUGIN_MANIFEST" "$MARKETPLACE_MANIFEST"
