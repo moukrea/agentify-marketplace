@@ -7,15 +7,24 @@ release tooling that publish it.
 
 ## Before you start
 
-1. Read `AGENTS.md` (repo root) and `plugins/agentify/AGENTIFY.md` — they are
-   the canonical agent-instructions for this project and explain the
-   architecture, scope boundaries, and contracts that every change must
-   respect.
-2. Read `LOOP_PROMPT.md` and `REVISE_AGENTIFY_PROMPT.md` for the revise →
-   review feedback loop the plugin embodies; non-trivial changes use this
-   loop on themselves.
-3. Skim recent entries in `BREAKING_CHANGES.md`, `DEPRECATIONS.md`, and
-   `PATCH_LOG.md` to understand the marketplace's compatibility posture.
+1. Read `AGENTS.md` (repo root) for the canonical agent-instructions: the
+   architecture, scope boundaries, and contracts every change must respect.
+   `plugins/agentify/AGENTIFY.md` ships as part of the plugin and is the
+   target-side instructions surface — read it if you're contributing to
+   the plugin itself; it's not authoritative for marketplace work.
+2. Skim recent entries in `plugins/agentify/BREAKING_CHANGES.md` and
+   `plugins/agentify/DEPRECATIONS.md` to understand the marketplace's
+   compatibility posture. (These are append-only registries owned by
+   `bin/gen-changelog.sh`; deprecations are also mirrored into
+   `CHANGELOG.md`'s keep-a-changelog format.)
+3. Skim `CHANGELOG.md` for the per-release summary.
+
+> ### Bash version
+> Several scripts use bash 4+ features (`declare -A`, `${!ref}`,
+> `mapfile`). macOS still ships bash 3.2 by default — contributors on
+> macOS should install Homebrew bash (`brew install bash`) and ensure
+> it's first on `PATH` for the shebangs to resolve correctly. CI runs
+> on ubuntu-24.04 which has bash 5.x.
 
 ## Conventional commits
 

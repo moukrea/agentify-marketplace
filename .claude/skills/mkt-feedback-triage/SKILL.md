@@ -1,13 +1,17 @@
 ---
 name: mkt-feedback-triage
-description: Triages incoming community feedback. Fetches open agentify-feedback-labelled issues via git_host issue_list, classifies them (bug/feature/regression/doc-gap/meta/practice-drift), applies labels, dedupes against open issues by UUID footer + title similarity, and surfaces recurring patterns as ADR drafts.
+description: Triages incoming community feedback interactively. Fetches open agentify-feedback-labelled issues via git_host issue_list, classifies them (bug/feature/regression/doc-gap/meta/practice-drift), proposes labels for the maintainer to apply, dedupes against open issues by UUID footer + title similarity, and surfaces recurring patterns as ADR drafts. The companion .github/workflows/feedback-triage.yml is informational-only today; headless labelling depends on a future Claude Code Action.
 ---
 
 # /mkt-feedback-triage
 
-Periodic triage of incoming community feedback. Designed to run
-non-interactively from `.github/workflows/feedback-triage.yml`
-(every 6h) AND interactively from a maintainer's session.
+Periodic triage of incoming community feedback. **Interactive only
+today** — the maintainer runs this skill in a Claude Code session
+and confirms each label application. The companion
+`.github/workflows/feedback-triage.yml` runs every 6h but is
+informational-only: it logs the open feedback queue without applying
+any labels. Headless labelling will land when the Claude Code Action
+stabilises.
 
 ## Inputs
 

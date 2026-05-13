@@ -46,9 +46,9 @@ finding under `category: ci-broken`.
 ### 4. Plugin product quality
 
 Delegate to the target-side `/agt-self-improve` skill running with
-`--scope=plugin-product` (it audits `plugins/agentify/context/` bundle
-freshness, `known-bugs.md` against upstream issues, etc.). Surface its
-findings inline.
+`--only context` (it audits `plugins/agentify/context/` bundle
+freshness, `plugins/agentify/context/known-bugs.md` against upstream
+issues, etc.). Surface its findings inline.
 
 ### 5. Community-feedback aggregation
 
@@ -92,8 +92,11 @@ After all phases, rebuild the trends rollup:
 ## Synthetic-source marker
 
 The audit document must include this HTML comment near the top so
-`REVISE_AGENTIFY_PROMPT.md` enforces the human-review gate before
-anything is applied:
+human reviewers (and any tooling that drives revise→review cycles)
+can detect a machine-produced audit and require explicit human-review
+sign-off before findings are applied. The marker is also the WS-F-003
+contract referenced by `finding-schema.json`'s `synthetic_source`
+required field.
 
 ```
 <!-- agentify-synthetic-review-source: mkt-self-improve -->

@@ -69,8 +69,11 @@ sources:
     authority_weight: 3
     applicability_tags: [harness, tools, evals, memory, observability]
   - id: humanlayer-blog
-    driver: rss
-    url: https://www.humanlayer.dev/blog/feed
+    driver: html-index
+    # H52 fix: the RSS endpoint at /blog/feed 404s; fall back to crawling
+    # the blog index HTML for entry URLs. If/when HumanLayer publishes a
+    # working feed, switch back to driver: rss.
+    url: https://www.humanlayer.dev/blog
     cadence_hint: monthly
     authority_weight: 3
     applicability_tags: [harness, claude-md]
@@ -83,8 +86,13 @@ sources:
 
   # ── Cross-platform / format standards ────────────────────────────────────
   - id: agents-md-spec
-    driver: github-releases
-    url: https://api.github.com/repos/agentsmd/agents.md/releases
+    driver: html
+    # H52 fix: the prior repo slug `agentsmd/agents.md` is not a real
+    # GitHub org. The canonical AGENTS.md spec lives at the agents.md
+    # website (https://agents.md/). Use the html driver against the
+    # site root; switch to a github-releases driver once a canonical
+    # repository is identified upstream.
+    url: https://agents.md/
     cadence_hint: monthly
     authority_weight: 5
     applicability_tags: [format, cross-platform]

@@ -55,6 +55,25 @@ request anonymity.
   `PostToolUse` hooks in `settings.json`.
 - Configure `secrets.provider` to a managed store (`opaq`, `1password-cli`,
   `vault`); never commit raw tokens to `agentify.config.json`.
+  Note: the `opaq` provider exposes only `wrap` (run-with-substitution);
+  `resolve` is unsupported by design because opaq scrubs child-process
+  stdout. Use `env` if you genuinely need plaintext resolution.
+- **MCP-backed task-backend / fleet-discover drivers** (`jira-mcp`,
+  `notion-mcp`, `linear-mcp`, `browser`): the driver dispatches to
+  whichever MCP server the user has installed. Apply trust-on-first-use:
+  install MCP servers only from sources you've vetted; treat each new
+  MCP server URL as a new trust boundary; pin the server's container
+  image or executable by digest where the server supports it.
+- **Browser drivers** (task-backend + fleet-discover): C7 redesigned
+  these to leverage Claude Code's native browser via the MCP pattern.
+  No docker, no host-side runner; the browser runs inside Claude Code's
+  existing sandbox. Headless (cron) invocation degrades to a read-only
+  curl webfetch for the task-backend driver and to `[]` for fleet
+  discovery — write verbs require an interactive Claude Code session.
 - Restrict CI runners that execute `practice-evolve.yml` to least-privilege
   tokens — the workflow only needs read access to public sources and write
   access to its own repository.
+- The release pipeline (`bump-version.sh`, `release.yml`) requires the
+  paired migration doc and refuses to publish a release with empty
+  notes — pre-release tags (`v1.2.3-rc.1`) are skipped at the workflow
+  level so a mis-tag doesn't publish.
