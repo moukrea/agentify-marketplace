@@ -1,12 +1,13 @@
 {
-  "generated_at": "2026-05-13T21:05:51Z",
-  "total": 2,
+  "generated_at": "2026-05-13T21:19:33Z",
+  "total": 10,
   "by_severity": {
-    "info": 2
+    "info": 10
   },
   "by_category": {
-    "meta": 2
+    "meta": 3,
+    "practice-drift": 7
   },
   "recurring": [],
-  "open_synthetic_findings": 2
+  "open_synthetic_findings": 10
 }

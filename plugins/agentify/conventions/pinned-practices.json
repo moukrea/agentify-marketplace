@@ -1,5 +1,58 @@
 {
   "$schema": "./pinned-practices.schema.json",
-  "pinned_at": "2026-05-12T00:00:00Z",
-  "sources": {}
+  "pinned_at": "2026-05-13T21:18:38Z",
+  "sources": {
+    "anthropic-engineering": {
+      "last_checked_at": "2026-05-13T21:18:38Z",
+      "last_content_hash": "sha256:f8431e11273b47cc110215feab3be69aede3804c2687bbd0df8b2c72b298d73a"
+    },
+    "anthropic-claude-code-docs": {
+      "last_checked_at": "2026-05-13T21:18:38Z",
+      "last_content_hash": "sha256:f2c4f2eab8807006602ff5c33c149695332fb35dca0418898572ea3da4fbff33"
+    },
+    "shopify-engineering": {
+      "last_checked_at": "2026-05-13T21:18:38Z",
+      "last_content_hash": "sha256:98fb34a1f241735f8f3fa12807e6af5e1cf37e32c00f0dd8d54bcdb995a99229"
+    },
+    "karpathy-autoresearch": {
+      "last_checked_at": "2026-05-13T21:18:38Z",
+      "transport_error": "fetch returned status 2"
+    },
+    "vercel-engineering": {
+      "last_checked_at": "2026-05-13T21:18:38Z",
+      "transport_error": "fetch returned status 2"
+    },
+    "spotify-engineering": {
+      "last_checked_at": "2026-05-13T21:18:38Z",
+      "transport_error": "fetch returned status 2"
+    },
+    "awesome-harness-engineering": {
+      "last_checked_at": "2026-05-13T21:18:38Z",
+      "transport_error": "fetch returned status 2"
+    },
+    "humanlayer-blog": {
+      "last_checked_at": "2026-05-13T21:18:38Z",
+      "last_content_hash": "sha256:93fd27278b7004a687134d33e59a5deb959ad4fd1df0604a73420ea22c265f8a"
+    },
+    "martin-fowler-harness": {
+      "last_checked_at": "2026-05-13T21:18:38Z",
+      "last_content_hash": "sha256:13ffddffd8c2d4669cac858b9b19648daa865d4254542f3c4f71d8b155200821"
+    },
+    "agents-md-spec": {
+      "last_checked_at": "2026-05-13T21:18:38Z",
+      "last_content_hash": "sha256:954ec5dad7eaf581ad4bfa090369b244ac0120b43722ef2efff5ba89fc52046f"
+    },
+    "atlassian-mcp": {
+      "last_checked_at": "2026-05-13T21:18:38Z",
+      "transport_error": "fetch returned status 2"
+    },
+    "notion-developers": {
+      "last_checked_at": "2026-05-13T21:18:38Z",
+      "transport_error": "fetch returned status 2"
+    },
+    "linear-changelog": {
+      "last_checked_at": "2026-05-13T21:18:38Z",
+      "transport_error": "fetch returned status 2"
+    }
+  }
 }

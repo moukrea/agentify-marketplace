@@ -1,0 +1,29 @@
+{
+  "iteration": 1,
+  "max_iterations": 6,
+  "session_id": "20260513T212022Z",
+  "started_at": "2026-05-13T21:20:22Z",
+  "agentify_md_sha": "a026760e133be4d15842c314c1d0af05dfe8bbe18c8b1c988036bd3f5a12c7fa",
+  "last_verdict": "healthy",
+  "last_counts": {
+    "critical": 0,
+    "major": 0,
+    "moderate": 0,
+    "polish": 0,
+    "info": 8
+  },
+  "prev_counts": {
+    "critical": 0,
+    "major": 0,
+    "moderate": 0,
+    "polish": 0,
+    "info": 0
+  },
+  "no_progress_streak": 0,
+  "regression_streak": 0,
+  "parked_findings": [],
+  "latest_revision_path": ".agents-work/revisions/01-mkt-self-improve-info-only.md",
+  "latest_review_path": ".agents-work/reviews/01-mkt-self-improve-info-only.md",
+  "ended_at": "2026-05-13T21:20:56Z",
+  "exit_reason": "DONE"
+}
