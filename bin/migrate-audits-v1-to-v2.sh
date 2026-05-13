@@ -104,9 +104,18 @@ JQ_MIGRATE='
     | .verdict = (.verdict | map_verdict)
     | (if has("headline_counts") then
         .headline_counts |= (
-          if has("strategic") then
+          (if has("strategic") then
             .info = ((.info // 0) + .strategic) | del(.strategic)
-          else . end
+          else . end)
+          # H-21 fix: synthesize defaults for any required v2 key the
+          # v1 audit omitted. The v2 schema requires every key in
+          # headline_counts; pre-fix, a v1 audit missing `polish`
+          # produced a v2 document that failed schema validation.
+          | (.critical //= 0)
+          | (.major    //= 0)
+          | (.moderate //= 0)
+          | (.polish   //= 0)
+          | (.info     //= 0)
         )
       else . end)
     | (if has("findings") then .findings |= map(migrate_finding) else . end)
@@ -166,21 +175,46 @@ migrate_one() {
 	fi
 	local tmp
 	tmp=$(mktemp "${f}.tmp.XXXXXX")
-	# Rewrite: stream input, swap JSON block contents.
+	# Rewrite: stream input, swap JSON block contents. H-27 fix:
+	# the prior awk swapped EVERY fenced `json` block with the same
+	# migrated content; if an audit had multiple blocks (some real
+	# audit JSON, some example/fixture data) all of them got
+	# overwritten with the migration of the first. Now we only swap
+	# the FIRST json block (matches the migrator's input contract:
+	# `migrated` was computed from the first block only).
 	awk -v new_json="$migrated" '
-		BEGIN { inblock=0; emitted=0 }
+		BEGIN { inblock=0; emitted=0; swapped=0 }
 		{
-			if ($0 ~ /^```json[[:space:]]*$/) {
+			if (!swapped && $0 ~ /^```json[[:space:]]*$/) {
 				print; inblock=1; print new_json; emitted=1; next
 			}
 			if (inblock && $0 ~ /^```[[:space:]]*$/) {
-				inblock=0; print; next
+				inblock=0; swapped=1; print; next
 			}
 			if (inblock) next
 			print
 		}
 		END { if (!emitted) print "ERROR: no json block found" > "/dev/stderr" }
 	' "$f" >"$tmp"
+	# H-27 fix: post-condition jq parse-check on the migrated file's
+	# first fenced JSON block. If the migration corrupted output (awk
+	# state-machine misfire on embedded ``` in a string, missing key
+	# synthesis edge case, etc.), restore from .v1.bak.
+	local post_json
+	post_json=$(awk '
+		BEGIN { inblock=0 }
+		/^```json[[:space:]]*$/ { inblock=1; next }
+		/^```[[:space:]]*$/ { if (inblock) exit }
+		inblock { print }
+	' "$tmp")
+	if ! printf '%s' "$post_json" | jq -e . >/dev/null 2>&1; then
+		echo "error:$f:post-migration JSON is malformed; restoring .v1.bak" >&2
+		if [ "$NO_BACKUP" -ne 1 ] && [ -f "${f}.v1.bak" ]; then
+			cp -p "${f}.v1.bak" "$f"
+		fi
+		rm -f "$tmp"
+		return 1
+	fi
 	mv "$tmp" "$f"
 	echo "migrate:$f (v$current_ver -> v2)"
 }
