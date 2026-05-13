@@ -1,0 +1,11 @@
+# plugins/agentify/practices/raw/ is the cache directory `mkt-practice-evolve`
+# writes raw fetched upstream content into before distillation. The
+# committed state lives under `plugins/agentify/practices/distillations/`
+# (structured per the recommendation schema) and is the input to the
+# adoption-check phase. The raw cache changes on every fetch and isn't
+# part of the marketplace's tracked state.
+plugins/agentify/practices/raw/
+
+# Bootstrap/render output (`bin/agentify --output=<path>`) — never the
+# working tree itself.
+.agentify-test-output/
