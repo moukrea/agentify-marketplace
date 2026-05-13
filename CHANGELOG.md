@@ -9,14 +9,22 @@ commits drive automated entries via `bin/gen-changelog.sh` (see
 
 ## [Unreleased]
 
+_No changes yet — this section accumulates new entries until the next
+release. `bin/gen-changelog.sh` regenerates it from Conventional
+Commits since the most recent `vX.Y.Z` tag; do not edit manually
+unless you intend to override the auto-derivation (and add an explicit
+note here saying so)._
+
+## [agentify 4.4.0] — 2026-05-13
+
 This is the v4.3.0 → v4.4.0 release. See
 `plugins/agentify/migrations/v4.3.0-to-v4.4.0.md` for the operator
 walkthrough including the one-shot audit migration via
 `bin/migrate-audits-v1-to-v2.sh`.
 
-The [Unreleased] section below includes the post-adversarial-review
-fix pass, which addressed all 17 blockers and 28 highs surfaced by the
-8-reviewer audit on PR #2. Every fix-pass commit carries a
+The release includes the post-adversarial-review fix pass, which
+addressed all 17 blockers and 28 highs surfaced by the 8-reviewer
+audit on PR #2. Every fix-pass commit carries a
 `Refs-finding: B/H/M/L-NN` trailer per ADR 0010 ("fix-pass discipline";
 every fix lands a regression bats that fails before and passes after).
 
