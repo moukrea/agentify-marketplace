@@ -24,7 +24,23 @@ provider_resolve() {
 	pass__require_bin || return $?
 	local ref="${1:-}"
 	[ -z "$ref" ] && { echo "pass: empty ref" >&2; return 64; }
-	pass show "$ref" 2>/dev/null
+	# H-5 fix: passwordstore.org convention puts the password on the
+	# FIRST line and metadata (user, url, notes) on subsequent lines.
+	# Returning the full multi-line entry made every conventional pass
+	# entry unusable: secrets__substitute_argv rejects multi-line values
+	# under its header-injection guard. Honor the convention with
+	# `head -n 1`. For callers needing the full body, the `#full`
+	# field suffix returns the entire entry.
+	local field=""
+	if [[ "$ref" == *"#"* ]]; then
+		field="${ref##*#}"
+		ref="${ref%#*}"
+	fi
+	if [ "$field" = "full" ]; then
+		pass show "$ref" 2>/dev/null
+	else
+		pass show "$ref" 2>/dev/null | head -n 1
+	fi
 }
 
 provider_wrap() {

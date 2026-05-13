@@ -30,7 +30,13 @@ provider_resolve() {
 	local raw
 	raw=$(gcloud secrets versions access latest --secret="$ref" 2>/dev/null) || return 1
 	if [ -n "$field" ]; then
-		printf '%s' "$raw" | jq -r ".$field" 2>/dev/null
+		# H-2 fix: same jq-injection class as aws-sm. Validate $field
+		# as a bare JSON key name and use safe `.[$f]` access.
+		if ! [[ "$field" =~ ^[A-Za-z_][A-Za-z0-9_-]*$ ]]; then
+			echo "gcp-sm: invalid field name '$field' (must match ^[A-Za-z_][A-Za-z0-9_-]*\$)" >&2
+			return 64
+		fi
+		printf '%s' "$raw" | jq -r --arg f "$field" '.[$f] // empty' 2>/dev/null
 	else
 		printf '%s' "$raw"
 	fi

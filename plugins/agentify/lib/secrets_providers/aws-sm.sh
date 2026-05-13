@@ -31,7 +31,17 @@ provider_resolve() {
 	raw=$(aws secretsmanager get-secret-value --secret-id "$ref" --query SecretString --output text 2>/dev/null) \
 		|| return 1
 	if [ -n "$field" ]; then
-		printf '%s' "$raw" | jq -r ".$field" 2>/dev/null
+		# H-2 fix: the prior implementation interpolated $field directly
+		# into the jq program: `jq -r ".$field"`. A ref like
+		# `myref#password,.apikey` exfiltrated multiple fields; `myref#.`
+		# returned the entire JSON document. Validate $field as a bare
+		# JSON key name and look up via `.[$f]` (jq's safe field access
+		# that doesn't allow expression injection).
+		if ! [[ "$field" =~ ^[A-Za-z_][A-Za-z0-9_-]*$ ]]; then
+			echo "aws-sm: invalid field name '$field' (must match ^[A-Za-z_][A-Za-z0-9_-]*\$)" >&2
+			return 64
+		fi
+		printf '%s' "$raw" | jq -r --arg f "$field" '.[$f] // empty' 2>/dev/null
 	else
 		printf '%s' "$raw"
 	fi

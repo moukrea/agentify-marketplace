@@ -26,6 +26,21 @@ generic__token_header() {
 	local prefix="${AGT_GIT_HOST_TOKEN_PREFIX:-Bearer }"
 	local token="${AGT_GIT_HOST_TOKEN:-}"
 	[ -z "$token" ] && return 0
+	# H-4 marker: this driver passes the auth header on curl argv via
+	# `-H "$hdr"` further down. The token is therefore visible in
+	# /proc/<pid>/cmdline, `ps aux`, and any `bash -x` xtrace of the
+	# dispatcher. Other drivers route through _io.sh:curl_with_token
+	# (a `-K` config file pattern) to avoid this leak; the generic-rest
+	# driver hasn't been migrated yet because it accepts arbitrary
+	# user-configured header formats. Migration is deferred to v4.4.1.
+	#
+	# TODO(v4.4.1): route generic-rest through _io.sh:curl_with_token
+	# by configuring AGT_CURL_AUTH_HEADER_FMT from the user's
+	# AGT_GIT_HOST_TOKEN_HEADER + AGT_GIT_HOST_TOKEN_PREFIX, then
+	# letting curl_with_token write the header to a `-K` cfg file.
+	if [ -n "${AGT_GIT_HOST_TOKEN:-}" ] && [ -z "${AGT_GENERIC_REST_ACCEPT_ARGV_LEAK:-}" ]; then
+		echo "generic-rest: WARNING — auth token reaches curl argv (visible in /proc/<pid>/cmdline and bash -x output). Migration to _io.sh:curl_with_token is deferred to v4.4.1. Set AGT_GENERIC_REST_ACCEPT_ARGV_LEAK=1 to silence this warning." >&2
+	fi
 	printf '%s: %s%s' "$header" "$prefix" "$token"
 }
 

@@ -17,7 +17,16 @@
 # the four functions: provider_resolve, provider_wrap, provider_list,
 # provider_check.
 
-set -euo pipefail
+# H-3 fix: only apply `set -euo pipefail` when executed as a script,
+# not when sourced. The previous unconditional `set -euo pipefail`
+# leaked strict-mode (`-u` nounset, `-o pipefail`) to every caller
+# that sourced this file — including hooks, the bats test runner, and
+# downstream user shells. A subsequent `$UNDEFINED_VAR` in the caller
+# would then kill the host shell. Guard so sourcing stays side-effect
+# free; executing as a CLI still uses strict mode.
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+	set -euo pipefail
+fi
 
 # H-26 fix: source _io.sh to pick up the bash 4+ guard (secrets.sh uses
 # `declare -A` at line ~138, a bash 4+ feature). Also brings in shared
