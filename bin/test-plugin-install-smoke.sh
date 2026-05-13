@@ -149,7 +149,8 @@ fi
 echo
 if [ "$fail" -eq 0 ]; then
   echo "=== plugin-install smoke: HEALTHY (all structural checks pass) ==="
-  echo "agentify plugin v${version:-?} active in $TARGET"
+  # AGENTIFY_VERSION already carries the `v` prefix; don't double it.
+  echo "agentify plugin ${version:-v?} active in $TARGET"
   exit 0
 else
   echo "=== plugin-install smoke: $fail check(s) failed ==="

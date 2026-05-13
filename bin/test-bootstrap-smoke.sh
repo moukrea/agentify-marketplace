@@ -84,8 +84,12 @@ if [ -f "$OUT/agentify.config.default.json" ]; then pass "agentify.config.defaul
 if [ -f "$OUT/.work/AGENTIFY_VERSION" ]; then
   pass "AGENTIFY_VERSION written under custom path_root (.work/)"
   ver="$(cat "$OUT/.work/AGENTIFY_VERSION")"
-  if echo "$ver" | grep -qE '^v4\.[0-9]+$'; then
-    pass "AGENTIFY_VERSION matches /v4\\.[0-9]+/ ($ver)"
+  # Accept both the legacy two-segment form (`v4.3`, from the prior
+  # AGENTIFY.md H1 grep) and the canonical three-segment SemVer form
+  # (`v4.4.0`, from the plugin.json `.version` lookup that bin/agentify
+  # now uses).
+  if echo "$ver" | grep -qE '^v[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
+    pass "AGENTIFY_VERSION matches /^v[0-9]+\\.[0-9]+(\\.[0-9]+)?$/ ($ver)"
   else
     ng "AGENTIFY_VERSION malformed: '$ver'"
   fi

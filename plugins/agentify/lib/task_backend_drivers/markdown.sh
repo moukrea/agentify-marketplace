@@ -205,10 +205,22 @@ task_backend_task_create() {
 	# Tasks for the markdown driver live as bullets inside tasks.md, not
 	# as separate files. We use a content-addressed approach: a task ref
 	# is "<plan-dir>/tasks.md#<task-id>" where task-id is a slug + counter.
+	#
+	# CRLF normalization: surfaced by the PR #2 discovery pass — values
+	# arriving from a CRLF-pasting Windows host carried `\r` into the
+	# tasks.md file. Downstream validator/awk patterns (`^- Task: `,
+	# `^\s+- \*\*Validation:\*\*`) tolerated the prefix match but
+	# captured the trailing `\r` into the validation content, inflating
+	# its length past the `<10 chars` guard for empty-ish entries and
+	# corrupting task ids consumed by /<p>-implement. Strip carriage
+	# returns up-front so the on-disk file is consistently LF.
 	local plan_ref="${1:-}"
 	local title="${2:-}"
 	local body="${3:-}"
 	local validation="${4:-}"
+	title=${title//$'\r'/}
+	body=${body//$'\r'/}
+	validation=${validation//$'\r'/}
 	[ -z "$plan_ref" ] || [ -z "$title" ] || [ -z "$validation" ] && {
 		echo "task_create: need plan-ref, title, and validation" >&2
 		return 64
