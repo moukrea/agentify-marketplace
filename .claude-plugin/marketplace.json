@@ -13,9 +13,14 @@
       "name": "agentify",
       "source": "./plugins/agentify",
       "description": "Bootstrap a production-grade agentic harness on any Claude Code repository. Configurable via agentify-config.schema.json (company, skill prefix, plugin name, marketplace URL, fleet size, loop path root, ticket prefix). Ships an agentic lifecycle layer (charter -> brainstorm -> PRD -> clarify -> plan -> tasks -> implement), plus skills for config / upgrade / self-improve / feedback / fleet-discover / decide. See commands[] for the full roster; prefix is configurable per target.",
-      "version": "4.3.0",
+      "version": "4.4.0",
       "category": "scaffolding",
-      "tags": ["agentic-harness", "bootstrap", "ralph-loop", "self-improving"],
+      "tags": [
+        "agentic-harness",
+        "bootstrap",
+        "ralph-loop",
+        "self-improving"
+      ],
       "license": "MIT",
       "homepage": "https://github.com/moukrea/agentify-marketplace/tree/main/plugins/agentify"
     }

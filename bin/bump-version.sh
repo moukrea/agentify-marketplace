@@ -159,11 +159,32 @@ jq --arg v "$new_version" '.plugins[0].version = $v' "$MARKETPLACE_MANIFEST" >"$
 mv "$plugin_tmp" "$PLUGIN_MANIFEST"
 mv "$marketplace_tmp" "$MARKETPLACE_MANIFEST"
 
+# Keep the AGENTIFY.md H1 version marker in sync. Surfaced by a manual
+# smoke during PR #2: prior bumps left the H1 stale (`(v4.3)` while
+# manifests said `4.4.0`), so the bootstrap-rendered AGENTIFY_VERSION
+# file and any /mkt-self-improve audit picked up the wrong number.
+# Only the major.minor segment lives in the H1 (per the prose
+# convention); the patch level is plugin.json's concern.
+AGENTIFY_MD="$REPO_ROOT/plugins/agentify/AGENTIFY.md"
+if [ -f "$AGENTIFY_MD" ]; then
+	new_h1_marker="(v${new_version%.*})"
+	agentify_md_tmp="${AGENTIFY_MD}.bump.$$"
+	# Replace the first `(vX.Y)`-style marker on the H1 line only.
+	awk -v new="$new_h1_marker" '
+		NR == 1 && /^# / {
+			sub(/\(v[0-9]+\.[0-9]+\)/, new)
+		}
+		{ print }
+	' "$AGENTIFY_MD" >"$agentify_md_tmp"
+	mv "$agentify_md_tmp" "$AGENTIFY_MD"
+fi
+
 # Transaction committed; disarm rollback trap and remove snapshots.
 trap - EXIT INT TERM HUP
 rm -f "$plugin_bak" "$marketplace_bak"
 
 # Stage the changes; the caller (or /mkt-release) commits + tags.
 git add "$PLUGIN_MANIFEST" "$MARKETPLACE_MANIFEST"
+[ -f "$AGENTIFY_MD" ] && git add "$AGENTIFY_MD"
 
 printf 'next=v%s\nbump=%s\ncommits=%s\n' "$new_version" "$bump" "$commit_count"

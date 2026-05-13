@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "agentify",
-  "version": "4.3.0",
+  "version": "4.4.0",
   "description": "Bootstrap a production-grade agentic harness on any Claude Code repository. Configurable per target via agentify.config.json (company, skill prefix, plugin name, marketplace URL, fleet size, loop path root, ticket prefix).",
   "author": {
     "name": "moukrea",

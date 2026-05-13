@@ -272,12 +272,25 @@ if [ "$loop_path_root" != ".agents-work" ]; then
 fi
 
 # Write a marker so /agt-upgrade (WS-D) and detection logic can detect
-# that this directory is an agentified target and at what version.
-agentify_version=$(grep -oE '\(v[0-9]+\.[0-9]+\)' "$output/AGENTIFY.md" | head -1 | tr -d '()')
+# Record AGENTIFY_VERSION into the loop path-root so detect_version.sh
+# (and any external tooling) can tell that this directory is an
+# agentified target and at what version.
+#
+# Version source-of-truth: plugin.json. Was previously a brittle
+# `grep -oE '\(v[0-9]+\.[0-9]+\)' AGENTIFY.md` that:
+#   * silently produced `unknown` if anyone reformatted the H1
+#   * lagged behind plugin.json when releases bumped only the manifest
+#     (caught by manual smoke during PR #2 — every previous bump-version
+#     run left the H1 stale, so the rendered AGENTIFY_VERSION file lied)
+# Reading the canonical jq path matches what skills/agt-self-improve now
+# does (B-8) and what /mkt-release expects.
+agentify_version=$(jq -r '.version // "unknown"' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null || echo "unknown")
 mkdir -p "$output/$loop_path_root"
-echo "${agentify_version:-unknown}" > "$output/$loop_path_root/AGENTIFY_VERSION"
+# Format as `vX.Y.Z` (was `vX.Y` two-segment from the AGENTIFY.md grep);
+# detect_version.sh tolerates both forms.
+echo "v${agentify_version}" > "$output/$loop_path_root/AGENTIFY_VERSION"
 
 # Emit a one-line summary.
 echo "agentify: rendered to $output"
 echo "  company=$company_name skill_prefix=$skill_prefix plugin=$plugin_name profile=$profile"
-echo "  loop.path_root=$loop_path_root version=${agentify_version:-unknown}"
+echo "  loop.path_root=$loop_path_root version=v${agentify_version:-unknown}"
