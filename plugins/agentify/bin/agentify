@@ -27,13 +27,33 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && p
 cd "$PLUGIN_ROOT"
 
 # Parse args. Extract --output= and pass everything else to the resolver.
+#
+# B-16 fix: the prior `for arg in "$@"` loop snapshotted the positional
+# args, so `shift` inside `--output) shift; output="$1"` did not advance
+# the iterator. With `agentify --output /tmp/out --foo=bar`, the path
+# `/tmp/out` was both consumed by the shift AND re-processed on the
+# next loop iteration (added to resolver_args), corrupting the
+# downstream resolver call. The author's note acknowledged the bug
+# explicitly but kept the buggy form "for clarity". Replace with a
+# proper `while [ "$#" -gt 0 ]` loop with explicit per-case shifts.
 output=""
 resolver_args=()
-for arg in "$@"; do
-  case "$arg" in
-    --output=*) output="${arg#--output=}" ;;
-    --output)   shift; output="$1" ;;  # NOTE: this loop won't see the shift, kept for clarity
-    *)          resolver_args+=("$arg") ;;
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output=*)
+      output="${1#--output=}"
+      shift
+      ;;
+    --output)
+      shift
+      [ "$#" -eq 0 ] && { echo "ERROR: --output requires a value" >&2; exit 2; }
+      output="$1"
+      shift
+      ;;
+    *)
+      resolver_args+=("$1")
+      shift
+      ;;
   esac
 done
 [ -z "$output" ] && { echo "ERROR: --output=<path> is required" >&2; exit 2; }
@@ -58,6 +78,19 @@ marketplace_host_regex="$(get '.marketplace.host_pattern_regex')"
 fleet_size="$(get '.fleet.size_engineers')"
 loop_path_root="$(get '.loop.path_root')"
 ticket_prefix="$(get '.ticket_system.prefix')"
+profile="$(get '.profile')"
+if [ -z "$profile" ]; then
+  echo "agentify: warning: .profile not set in config; using 'standard'" >&2
+  profile="standard"
+fi
+# B-17 fix: invalid --profile=<value> previously fell into the `*)` arm
+# and silently defaulted to standard. CI / scripts couldn't detect
+# typos. Now: exit 2 with a clear error so invalid profiles are caught
+# at the bootstrap step.
+case "$profile" in
+  minimal|standard|full) ;;
+  *) echo "agentify: ERROR: unknown profile '$profile' (need minimal|standard|full)" >&2; exit 2 ;;
+esac
 
 # Derived placeholders.
 if [ -z "$fleet_size" ] || [ "$fleet_size" = "null" ]; then
@@ -105,6 +138,80 @@ for d in context lib; do
     cp -r "$d" "$output/"
   fi
 done
+
+# Profile-gated pruning. Drivers / providers / extra libraries beyond
+# the selected profile's slice are removed after the wholesale copy
+# above. Keeps the dispatcher (e.g., secrets.sh, git_host.sh) in every
+# profile so callers' code paths don't break — only the driver files
+# differ.
+apply_profile_filter() {
+  local prof="$1" lib_dir="$output/lib"
+  [ -d "$lib_dir" ] || return 0
+
+  # Per-profile keep lists (everything else under the named subdir is
+  # pruned). The "always-keep" libs (resolve_config, detect_version,
+  # feedback_ingest, conventional-commit support) are not enumerated
+  # here — they're never pruned.
+  local keep_secrets keep_git_host keep_task keep_fleet
+  case "$prof" in
+    minimal)
+      keep_secrets=(env.sh)
+      keep_git_host=(github.sh)
+      keep_task=()                  # no lifecycle support in minimal
+      keep_fleet=()                 # no fleet discovery in minimal
+      # Also drop lifecycle/practice/audit helpers entirely.
+      rm -f "$lib_dir/task_backend.sh" "$lib_dir/fleet_discover.sh" \
+            "$lib_dir/practice_track.sh" "$lib_dir/audit_aggregate.sh" 2>/dev/null || true
+      rm -rf "$lib_dir/task_backend_drivers" "$lib_dir/fleet_discover_providers" \
+             "$lib_dir/practice_track_drivers" 2>/dev/null || true
+      ;;
+    standard)
+      keep_secrets=(env.sh opaq.sh)
+      keep_git_host=(github.sh)
+      keep_task=(markdown.sh file.sh)
+      keep_fleet=(file.sh github-org.sh gitlab-group.sh)
+      ;;
+    full)
+      # Keep everything.
+      return 0
+      ;;
+  esac
+
+  prune_dir() {
+    local dir="$1"; shift
+    local keep=("$@")
+    [ -d "$dir" ] || return 0
+    local keep_re=""
+    if [ "${#keep[@]}" -gt 0 ]; then
+      keep_re="$(printf '%s\n' "${keep[@]}")"
+    fi
+    find "$dir" -maxdepth 1 -mindepth 1 -type f -name '*.sh' -print0 \
+      | xargs -0 -I{} bash -c '
+          f="$0"; keep_list="$1"
+          name="$(basename "$f")"
+          if [ -z "$keep_list" ] || ! grep -qx "$name" <<<"$keep_list"; then
+            rm -f -- "$f"
+          fi
+        ' {} "$keep_re"
+  }
+
+  prune_dir "$lib_dir/secrets_providers"           "${keep_secrets[@]}"
+  prune_dir "$lib_dir/git_host_drivers"            "${keep_git_host[@]}"
+  prune_dir "$lib_dir/task_backend_drivers"        "${keep_task[@]}"
+  prune_dir "$lib_dir/fleet_discover_providers"    "${keep_fleet[@]}"
+
+  # Browser scripts dir (under task_backend_drivers/browser/) only ships
+  # in `full`; remove it in minimal/standard.
+  if [ "$prof" != "full" ]; then
+    rm -rf "$lib_dir/task_backend_drivers/browser" \
+           "$lib_dir/fleet_discover_providers/browser" 2>/dev/null || true
+  fi
+}
+apply_profile_filter "$profile"
+
+# Record the chosen profile so /<prefix>-upgrade and /<prefix>-self-improve
+# can verify the install matches the declared profile.
+printf '%s\n' "$profile" >"$output/.agentify-profile"
 
 # Substitution pass. Order matters when one placeholder is a prefix of
 # another (longest first). All substitutions are literal — perl's
@@ -165,12 +272,25 @@ if [ "$loop_path_root" != ".agents-work" ]; then
 fi
 
 # Write a marker so /agt-upgrade (WS-D) and detection logic can detect
-# that this directory is an agentified target and at what version.
-agentify_version=$(grep -oE '\(v[0-9]+\.[0-9]+\)' "$output/AGENTIFY.md" | head -1 | tr -d '()')
+# Record AGENTIFY_VERSION into the loop path-root so detect_version.sh
+# (and any external tooling) can tell that this directory is an
+# agentified target and at what version.
+#
+# Version source-of-truth: plugin.json. Was previously a brittle
+# `grep -oE '\(v[0-9]+\.[0-9]+\)' AGENTIFY.md` that:
+#   * silently produced `unknown` if anyone reformatted the H1
+#   * lagged behind plugin.json when releases bumped only the manifest
+#     (caught by manual smoke during PR #2 — every previous bump-version
+#     run left the H1 stale, so the rendered AGENTIFY_VERSION file lied)
+# Reading the canonical jq path matches what skills/agt-self-improve now
+# does (B-8) and what /mkt-release expects.
+agentify_version=$(jq -r '.version // "unknown"' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null || echo "unknown")
 mkdir -p "$output/$loop_path_root"
-echo "${agentify_version:-unknown}" > "$output/$loop_path_root/AGENTIFY_VERSION"
+# Format as `vX.Y.Z` (was `vX.Y` two-segment from the AGENTIFY.md grep);
+# detect_version.sh tolerates both forms.
+echo "v${agentify_version}" > "$output/$loop_path_root/AGENTIFY_VERSION"
 
 # Emit a one-line summary.
 echo "agentify: rendered to $output"
-echo "  company=$company_name skill_prefix=$skill_prefix plugin=$plugin_name"
-echo "  loop.path_root=$loop_path_root version=${agentify_version:-unknown}"
+echo "  company=$company_name skill_prefix=$skill_prefix plugin=$plugin_name profile=$profile"
+echo "  loop.path_root=$loop_path_root version=v${agentify_version:-unknown}"

@@ -1,0 +1,28 @@
+---
+prd_id: {{prd_id}}
+plan_ref: {{plan_backend_ref}}
+---
+
+# Tasks: {{title}}
+
+## Phase 1: <name>
+- Task: <action>
+  - **Validation:** <falsifiable signal>
+- Task: <action>
+  - **Validation:** <falsifiable signal>
+
+## Checkpoint 1
+<reviewable artifact at end of phase — file path, test output, screenshot diff>
+
+## Phase 2: <name>
+- Task: <action>
+  - **Validation:** <falsifiable signal>
+
+## Checkpoint 2
+<reviewable artifact>
+
+# Discipline (enforced by lifecycle-conformance on markdown backend):
+# - ≤5 H2 phases
+# - ≤7 tasks per phase
+# - Every task has **Validation:**
+# - Every phase ends with ## Checkpoint N

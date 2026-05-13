@@ -31,7 +31,7 @@ ng()   { printf '  FAIL: %s\n' "$1"; fail=$((fail+1)); }
 echo "=== self-improve smoke: SKILL.md sanity ==="
 SKILL=plugins/agentify/skills/agt-self-improve/SKILL.md
 test -f "$SKILL" && pass "SKILL.md exists" || ng "SKILL.md missing"
-head -1 "$SKILL" | grep -q '^---$' && pass "SKILL.md has frontmatter" \
+head -n 1 "$SKILL" | grep -q '^---$' && pass "SKILL.md has frontmatter" \
                                    || ng "SKILL.md missing frontmatter"
 grep -q 'WebSearch\|WebFetch' "$SKILL" && pass "SKILL.md declares WebSearch/WebFetch tools" \
                                        || ng "SKILL.md missing WebSearch/WebFetch"
@@ -150,7 +150,7 @@ ac=$(jq -r '.findings[0].acceptance_criterion' "$AUDIT_JSON")
 
 echo
 echo "=== self-improve smoke: synthetic-marker recognition ==="
-head -1 "$AUDIT_FILE" | grep -q 'agentify-synthetic-review-source: self-improve' \
+head -n 1 "$AUDIT_FILE" | grep -q 'agentify-synthetic-review-source: self-improve' \
   && pass "synthetic audit carries WS-F-003 marker" \
   || ng "synthetic audit missing marker"
 grep -q 'agentify-synthetic-review-source' plugins/agentify/REVISE_AGENTIFY_PROMPT.md \

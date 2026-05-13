@@ -107,7 +107,7 @@ if [ $? -eq 0 ] && [ -f "$TARGET/AGENTIFY.md" ]; then
   pass "plugins/agentify/bin/agentify rendered cleanly into $TARGET"
 else
   ng "plugins/agentify/bin/agentify failed:"
-  sed 's/^/    /' "$TMP/agentify.log" | head -10
+  sed 's/^/    /' "$TMP/agentify.log" | head -n 10
 fi
 
 # The rendered target should look like an installable agentify harness.
@@ -149,7 +149,8 @@ fi
 echo
 if [ "$fail" -eq 0 ]; then
   echo "=== plugin-install smoke: HEALTHY (all structural checks pass) ==="
-  echo "agentify plugin v${version:-?} active in $TARGET"
+  # AGENTIFY_VERSION already carries the `v` prefix; don't double it.
+  echo "agentify plugin ${version:-v?} active in $TARGET"
   exit 0
 else
   echo "=== plugin-install smoke: $fail check(s) failed ==="

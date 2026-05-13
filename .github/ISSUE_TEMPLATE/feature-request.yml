@@ -1,0 +1,42 @@
+name: Feature request
+description: Propose a new capability for the agentify plugin or marketplace.
+title: "[feature] "
+labels: ["agentify-feedback", "feature", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem are you trying to solve? Concrete usage scenarios beat abstract statements.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed capability
+      description: What should agentify do that it doesn't today? Keep this descriptive (behaviour, surface, defaults) rather than prescriptive (implementation).
+    validations:
+      required: true
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact
+      description: How widespread is the need?
+      options:
+        - blocking-adoption
+        - widespread-pain
+        - team-specific
+        - nice-to-have
+      default: 2
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds have you tried? What did/didn't work?
+  - type: input
+    id: feedback_id
+    attributes:
+      label: agentify-feedback-id
+      placeholder: "(optional)"

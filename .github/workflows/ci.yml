@@ -1,0 +1,246 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (shell + JSON + schemas)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Install shellcheck and shfmt
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends shellcheck
+          # H30 fix: pin shfmt by sha256. GitHub release assets are
+          # mutable; a tag-only pin lets a maintainer with mvdan/sh push
+          # access trojanize every CI run. The binary executes during
+          # the lint step, so verify before chmod +x.
+          SHFMT_URL='https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_amd64'
+          SHFMT_SHA256='1f57a384d59542f8fac5f503da1f3ea44242f46dff969569e80b524d64b71dbc'
+          curl -sSLo /tmp/shfmt "$SHFMT_URL"
+          printf '%s  /tmp/shfmt\n' "$SHFMT_SHA256" | sha256sum -c -
+          sudo install -m 0755 /tmp/shfmt /usr/local/bin/shfmt
+          rm -f /tmp/shfmt
+
+      - name: shellcheck (error severity blocks; warning/info/style advisory)
+        # Blocks the build only on `error`-severity findings. Lower-severity
+        # findings are surfaced in the job log so the team can address them
+        # over time without freezing CI on legacy style debt.
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(git ls-files '*.sh')
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "no shell files to lint"
+            exit 0
+          fi
+          printf 'Linting (blocking):\n%s\n' "${files[@]}"
+          shellcheck -S error "${files[@]}"
+
+          echo ""
+          echo "::group::shellcheck advisory findings (warning/info/style)"
+          shellcheck -S style "${files[@]}" || true
+          echo "::endgroup::"
+
+      - name: shfmt (advisory)
+        # Surfaces diff in the job log; does not block the build until the
+        # team commits to a single formatter style (tracked as an audit
+        # finding under audits/).
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          shfmt -d -i 0 -ci $(git ls-files '*.sh') || true
+
+      - name: JSON syntax
+        run: |
+          set -euo pipefail
+          fail=0
+          while IFS= read -r f; do
+            jq empty "$f" || { echo "::error file=$f::invalid JSON"; fail=1; }
+          done < <(git ls-files '*.json')
+          exit "$fail"
+
+      - name: JSON-Schema validation (schemas themselves)
+        run: |
+          set -euo pipefail
+          # H30 fix: pin pip dependencies to specific versions so a
+          # poisoned upstream release can't trojanize the lint runner.
+          python3 -m pip install --quiet 'jsonschema==4.23.0'
+          # B-5 fix: the prior step pip-installed jsonschema then did
+          # `python3 -c "import json; json.load(open('$s'))"` — pure JSON
+          # parse, no schema validation. A schema with malformed `enum`,
+          # bad `$ref`, or invalid `$schema` URI passed silently.
+          # Replace with a real `check_schema()` call that walks the
+          # meta-schema (Draft 2020-12). Also `ajv`-validate
+          # agentify.config.json against its schema while we have ajv
+          # available (smoke-validates the dogfood).
+          for s in $(git ls-files '*-schema.json'); do
+            python3 -c "
+import json, sys
+from jsonschema import Draft202012Validator
+s = sys.argv[1]
+doc = json.load(open(s))
+Draft202012Validator.check_schema(doc)
+print(f'{s} schema OK')
+" "$s" || { echo "::error file=$s::schema validation failed"; exit 1; }
+          done
+
+  manifest-conformance:
+    name: Manifest conformance
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Install bats + jq
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bats jq
+
+      - name: Run manifest-conformance tests
+        run: bats tests/manifest-conformance.bats
+
+  bats:
+    name: Bats tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Install bats + jq
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bats jq
+
+      - name: Run all bats tests
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          tests=(tests/*.bats)
+          if [ "${#tests[@]}" -eq 0 ]; then
+            echo "no bats tests found"
+            exit 0
+          fi
+          bats "${tests[@]}"
+
+  smoke-bootstrap:
+    name: Smoke — bootstrap
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends jq
+          bash bin/test-bootstrap-smoke.sh
+
+  smoke-plugin-install:
+    name: Smoke — plugin install
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends jq
+          bash bin/test-plugin-install-smoke.sh
+
+  smoke-self-improve:
+    name: Smoke — self-improve
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends jq
+          bash bin/test-self-improve-smoke.sh
+
+  smoke-self-loop:
+    name: Smoke — self-loop
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends jq
+          bash bin/test-self-loop-smoke.sh
+
+  smoke-de-spec:
+    name: Smoke — de-spec
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends jq
+          bash bin/test-de-spec-smoke.sh
+
+  lifecycle-conformance:
+    name: Lifecycle conformance
+    runs-on: ubuntu-24.04
+    if: ${{ hashFiles('prds/**/tasks.md', 'documentation/agentic/prds/**/tasks.md') != '' }}
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Install jq
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends jq
+
+      - name: Validate every PRD's tasks.md (≤5 phases × ≤7 tasks, falsifiable Validation)
+        run: |
+          set -euo pipefail
+          # task_backend validate exits non-zero on any violation.
+          bash plugins/agentify/lib/task_backend.sh validate all
+
+  migration-gate:
+    name: Migration gate
+    runs-on: ubuntu-24.04
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-migration-needed') }}
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+        with:
+          fetch-depth: 0
+
+      - name: Validate every migration document in the tree
+        run: |
+          set -euo pipefail
+          bash bin/validate-migration.sh plugins/agentify/migrations
+
+      - name: Require a paired migration when plugin.json version bumps
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          old=$(git show "origin/$BASE_REF:plugins/agentify/.claude-plugin/plugin.json" 2>/dev/null \
+                  | jq -r .version) || old=""
+          new=$(jq -r .version plugins/agentify/.claude-plugin/plugin.json)
+          if [ -z "$old" ] || [ "$old" = "$new" ]; then
+            echo "no version bump; migration-gate not required"
+            exit 0
+          fi
+          f="plugins/agentify/migrations/v${old}-to-v${new}.md"
+          if [ ! -f "$f" ]; then
+            echo "::error::plugin version $old → $new but missing migration doc $f"
+            echo "Apply label 'no-migration-needed' on the PR if this is intentional."
+            exit 1
+          fi
+          bash bin/validate-migration.sh "$f"

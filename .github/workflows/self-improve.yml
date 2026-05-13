@@ -1,0 +1,46 @@
+name: self-improve
+
+# Headless `/mkt-self-improve` runner stub. ADR 0009 invariant #3 declares
+# that the marketplace audits itself in CI. The actual finding-production
+# pass requires an interactive Claude Code session today; this workflow
+# is a placeholder that becomes a real headless runner once the Claude
+# Code Action stabilises. Until then the workflow logs an informational
+# notice and exits 0 — it is wired into the schedule and the file is
+# version-tracked so the ADR's claim is verifiable in the tree.
+
+on:
+  schedule:
+    - cron: "23 5 * * 1"  # weekly, Mondays 05:23 UTC (after practice-evolve)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: self-improve
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Run /mkt-self-improve headlessly (pending Claude Code Action)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+        with:
+          fetch-depth: 0
+
+      - name: Pending Claude Code Action
+        run: |
+          set -euo pipefail
+          cat <<'NOTE'
+          ::notice::self-improve.yml is a stub. The headless
+          /mkt-self-improve invocation requires the Claude Code Action,
+          which is not yet GA at the time of this PR. Until it lands,
+          the marketplace's self-audit runs interactively (a maintainer
+          invokes `/mkt-self-improve` in a Claude Code session). Audit
+          findings are committed to audits/<timestamp>.md; the nightly
+          audit-trend.yml workflow rolls them up.
+          NOTE
+          exit 0

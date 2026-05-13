@@ -1,0 +1,118 @@
+# Curated list of production-practice sources tracked by /mkt-practice-evolve.
+#
+# Per source:
+#   id                  unique slug used in pinned-practices.json keys
+#   driver              which lib/practice_track_drivers/<name>.sh fetches it
+#   url                 canonical entry point
+#   cadence_hint        skill-side rate-limit (the cron may fire more often)
+#   authority_weight    1-5; gates whether the source can auto-open ADRs
+#                       (auto-open threshold defaults to ≥4)
+#   applicability_tags  free-form labels surfaced in audits
+#
+# Users can extend this list with private sources via
+# <path_root>/conventions/sources.local.yaml (unioned at read time; not
+# committed to this repo). Removing a source is non-destructive — its
+# distillations stay under practices/distillations/ for historical record.
+
+sources:
+  # ── Anthropic (canonical signals) ────────────────────────────────────────
+  - id: anthropic-engineering
+    driver: html-index
+    url: https://www.anthropic.com/engineering
+    cadence_hint: daily
+    authority_weight: 5
+    applicability_tags: [harness, context-eng, agent-sdk, tools]
+  - id: anthropic-claude-code-docs
+    driver: sitemap
+    url: https://code.claude.com/sitemap.xml
+    cadence_hint: weekly
+    authority_weight: 5
+    applicability_tags: [claude-code, hooks, skills, plugins]
+
+  # ── Shopify ──────────────────────────────────────────────────────────────
+  - id: shopify-engineering
+    driver: html-index
+    url: https://shopify.engineering/
+    cadence_hint: weekly
+    authority_weight: 4
+    applicability_tags: [scale, agent-orchestration, mcp-infra]
+
+  # ── Karpathy ─────────────────────────────────────────────────────────────
+  - id: karpathy-autoresearch
+    driver: github-releases
+    url: https://api.github.com/repos/karpathy/autoresearch/releases
+    cadence_hint: weekly
+    authority_weight: 4
+    applicability_tags: [loop, validation-criterion, experiments]
+
+  # ── Vercel ───────────────────────────────────────────────────────────────
+  - id: vercel-engineering
+    driver: rss
+    url: https://vercel.com/blog/feed
+    cadence_hint: weekly
+    authority_weight: 3
+    applicability_tags: [composite-pipelines, autofixers, agents]
+
+  # ── Spotify (Honk series + general) ──────────────────────────────────────
+  - id: spotify-engineering
+    driver: rss
+    url: https://engineering.atspotify.com/feed.xml
+    cadence_hint: weekly
+    authority_weight: 4
+    applicability_tags: [background-agent, context-eng, feedback-loops]
+
+  # ── Community: production-grade harness engineering ──────────────────────
+  - id: awesome-harness-engineering
+    driver: github-readme
+    url: https://api.github.com/repos/ai-boost/awesome-harness-engineering/readme
+    cadence_hint: weekly
+    authority_weight: 3
+    applicability_tags: [harness, tools, evals, memory, observability]
+  - id: humanlayer-blog
+    driver: html-index
+    # H52 fix: the RSS endpoint at /blog/feed 404s; fall back to crawling
+    # the blog index HTML for entry URLs. If/when HumanLayer publishes a
+    # working feed, switch back to driver: rss.
+    url: https://www.humanlayer.dev/blog
+    cadence_hint: monthly
+    authority_weight: 3
+    applicability_tags: [harness, claude-md]
+  - id: martin-fowler-harness
+    driver: html
+    url: https://martinfowler.com/articles/harness-engineering.html
+    cadence_hint: quarterly
+    authority_weight: 5
+    applicability_tags: [harness, constraints]
+
+  # ── Cross-platform / format standards ────────────────────────────────────
+  - id: agents-md-spec
+    driver: html
+    # H52 fix: the prior repo slug `agentsmd/agents.md` is not a real
+    # GitHub org. The canonical AGENTS.md spec lives at the agents.md
+    # website (https://agents.md/). Use the html driver against the
+    # site root; switch to a github-releases driver once a canonical
+    # repository is identified upstream.
+    url: https://agents.md/
+    cadence_hint: monthly
+    authority_weight: 5
+    applicability_tags: [format, cross-platform]
+
+  # ── Task-backend endpoints (deprecation watch) ───────────────────────────
+  - id: atlassian-mcp
+    driver: html
+    url: https://www.atlassian.com/blog/announcements/atlassian-mcp-server-ga
+    cadence_hint: weekly
+    authority_weight: 5
+    applicability_tags: [jira-mcp, deprecation, endpoint]
+  - id: notion-developers
+    driver: rss
+    url: https://developers.notion.com/changelog.rss
+    cadence_hint: monthly
+    authority_weight: 4
+    applicability_tags: [notion-api, deprecation]
+  - id: linear-changelog
+    driver: rss
+    url: https://linear.app/changelog/rss
+    cadence_hint: monthly
+    authority_weight: 4
+    applicability_tags: [linear-api, deprecation]

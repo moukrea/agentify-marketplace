@@ -78,11 +78,41 @@ if [ -z "${raw:-}" ]; then
     exit 2
   fi
 
-  # gh dependency check.
-  if ! command -v gh >/dev/null 2>&1; then
-    echo "WARN: gh CLI not found; emitting empty list" >&2
-    echo '[]'
-    exit 0
+  # H21 fix: driver dependency check used to hard-code `gh|glab`, which
+  # falsely declared an empty list for gitea / codeberg / generic-rest
+  # drivers (those use curl, not a CLI). Source git_host.sh and ask it
+  # which driver is active; only require a CLI when the active driver
+  # genuinely needs one.
+  GIT_HOST_LIB="${GIT_HOST_LIB:-$(dirname "${BASH_SOURCE[0]}")/git_host.sh}"
+  if [ -f "$GIT_HOST_LIB" ]; then
+    # shellcheck source=git_host.sh
+    . "$GIT_HOST_LIB"
+    _gh_driver=$(git_host driver 2>/dev/null || echo "github")
+    case "$_gh_driver" in
+      github)
+        if ! command -v gh >/dev/null 2>&1; then
+          echo "WARN: github driver requires 'gh' CLI; emitting empty list" >&2
+          echo '[]'
+          exit 0
+        fi
+        ;;
+      gitlab)
+        if ! command -v glab >/dev/null 2>&1; then
+          echo "WARN: gitlab driver requires 'glab' CLI; emitting empty list" >&2
+          echo '[]'
+          exit 0
+        fi
+        ;;
+      gitea|codeberg|generic-rest)
+        # curl-only drivers — no CLI to check. Fall through to fetch.
+        ;;
+      *)
+        echo "WARN: unknown git-host driver '$_gh_driver'; emitting empty list" >&2
+        echo '[]'
+        exit 0
+        ;;
+    esac
+    unset _gh_driver
   fi
 fi
 
@@ -109,14 +139,12 @@ parse_feedback_id_from_body() {
 
 # If we don't have raw from a fixture, pull all issues with the
 # agentify-feedback label (any state — we need closed-with-addressed/
-# wontfix for status mapping). gh returns a JSON array.
+# wontfix for status mapping). Routes through git_host so it works on
+# whatever host the marketplace lives on (GitHub today, GitLab tomorrow).
 if [ -z "${raw:-}" ]; then
-  raw=$(gh issue list \
-    --repo "$upstream" \
-    --label agentify-feedback \
-    --state all \
-    --limit 100 \
-    --json number,title,labels,body,createdAt,updatedAt,state,url 2>/dev/null \
+  # shellcheck source=git_host.sh
+  . "$GIT_HOST_LIB"
+  raw=$(AGT_GIT_HOST_REPO="$upstream" git_host issue_list all agentify-feedback 2>/dev/null \
     || echo '[]')
 fi
 

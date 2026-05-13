@@ -1,0 +1,38 @@
+# {__FLEET_NAME__}-marketplace
+
+Internal fleet marketplace for **{__FLEET_GROUP__}**. Bootstrapped from
+[agentify-marketplace]({__PARENT_MARKETPLACE_URL__}) via
+`/mkt-fleet-bootstrap`.
+
+## Peers
+
+The repos this marketplace serves are listed in
+[`fleet/peers.json`](fleet/peers.json). Each peer's
+`agentify.config.json:.marketplace.url` should point at this
+marketplace **in addition to** the upstream agentify-marketplace.
+
+## What lives here
+
+- `plugins/{__FLEET_NAME__}-shared/` — skills, hooks, and conventions
+  shared across the fleet (auth integrations, deploy patterns,
+  ticket conventions, internal MCP routing, etc.).
+- `decisions/` — ADRs the fleet has formally adopted, distinct from
+  the upstream marketplace's ADRs.
+
+## Adoption flow
+
+Peers consume this marketplace by:
+
+```sh
+claude /plugin marketplace add {__FLEET_OWNER__}/{__FLEET_NAME__}-marketplace
+claude /plugin install {__FLEET_NAME__}-shared@{__FLEET_NAME__}-marketplace
+```
+
+The upstream agentify plugin remains installed independently — fleet
+plugins are additive, not replacements.
+
+## Contributing
+
+Same conventions as the upstream marketplace's `CONTRIBUTING.md` apply:
+conventional commits, migrations on plugin-version bumps, every
+finding-schema document gets a synthetic-source marker.

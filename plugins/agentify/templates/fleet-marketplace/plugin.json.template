@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "{__FLEET_NAME__}-shared",
+  "version": "0.1.0",
+  "description": "Shared {__FLEET_GROUP__} fleet plugin (skills, hooks, conventions). Bootstrapped from agentify-marketplace.",
+  "author": { "name": "{__FLEET_OWNER__}" },
+  "license": "MIT",
+  "keywords": ["agentify-fleet", "{__FLEET_NAME__}", "shared"],
+  "commands": []
+}

@@ -1,12 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/moukrea/agentify-marketplace/blob/main/agentify-config.schema.json",
+  "$id": "https://raw.githubusercontent.com/moukrea/agentify-marketplace/main/plugins/agentify/agentify-config.schema.json",
   "title": "agentify-config",
   "description": "Configuration schema for the agentify Claude Code plugin. Drives the parameter substitutions performed at agentification time (placeholders of the form {__AGT_FIELD__} in AGENTIFY.md, hooks, prompts, and templates) and the runtime behavior of the plugin's slash commands. Resolved by lib/resolve_config.sh in the precedence order: skill args > project-root agentify.config.json > plugin-install agentify.config.default.json.",
   "type": "object",
   "additionalProperties": false,
   "required": ["company", "skills"],
   "properties": {
+    "_comment": {
+      "type": "string",
+      "description": "Free-form human annotation. Ignored by every code path; preserved across re-renders."
+    },
     "company": {
       "type": "object",
       "description": "Identity of the team or organization the harness is being agentified for. Used in soft-framing prose (AGENTS.md, REVIEW/REVISE prompts) and in any branding-bearing template output.",
@@ -113,7 +117,7 @@
     },
     "fleet": {
       "type": "object",
-      "description": "Fleet-context soft-framing for REVIEW/REVISE prompt templates. Optional; omitted if size is unknown.",
+      "description": "Fleet-context soft-framing AND fleet-aware peer discovery (ADR 0006). Optional; omitted entirely if neither size nor discovery is configured.",
       "additionalProperties": false,
       "properties": {
         "size_engineers": {
@@ -122,6 +126,31 @@
           "default": null,
           "minimum": 1,
           "maximum": 100000
+        },
+        "group_name": {
+          "type": ["string", "null"],
+          "description": "Optional fleet name (e.g., 'platform-tools') used by /<prefix>-fleet-discover and /mkt-fleet-bootstrap. Substituted into {__AGT_FLEET_GROUP_NAME__}.",
+          "default": null
+        },
+        "discovery": {
+          "type": "object",
+          "description": "Peer-discovery configuration. Multi-provider; each runs in declared order; results unioned + dedup by canonical URL.",
+          "additionalProperties": false,
+          "properties": {
+            "providers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["type"],
+                "properties": {
+                  "type": { "type": "string", "enum": ["file", "github-org", "gitlab-group", "homebrew-tap", "apt-repo", "rpm-repo", "browser"] }
+                },
+                "additionalProperties": true
+              },
+              "default": []
+            },
+            "bootstrap_prompt": { "type": "boolean", "default": true }
+          }
         }
       }
     },
@@ -137,6 +166,158 @@
           "pattern": "^\\.?[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$"
         }
       }
+    },
+    "secrets": {
+      "type": "object",
+      "description": "Provider-pluggable secret-injection layer (ADR 0005). Routes every token-bearing driver call through plugins/agentify/lib/secrets.sh.",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["env", "opaq", "1password-cli", "pass", "vault", "aws-sm", "gcp-sm"],
+          "default": "env"
+        },
+        "opaq_namespace": { "type": ["string", "null"], "default": null }
+      }
+    },
+    "git_host": {
+      "type": "object",
+      "description": "Provider-pluggable git-host driver (ADR 0002).",
+      "additionalProperties": false,
+      "properties": {
+        "driver": {
+          "type": "string",
+          "enum": ["auto", "github", "gitlab", "gitea", "codeberg", "generic-rest"],
+          "default": "auto"
+        },
+        "endpoint": { "type": ["string", "null"], "default": null },
+        "auth": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "provider": { "type": "string", "enum": ["env", "opaq", "1password-cli", "pass", "vault", "aws-sm", "gcp-sm"] },
+            "secret_ref": { "type": "string" }
+          }
+        }
+      }
+    },
+    "task_backend": {
+      "type": "object",
+      "description": "Provider-pluggable task-backend driver (ADR 0004). Backs the lifecycle layer.",
+      "additionalProperties": false,
+      "properties": {
+        "driver": {
+          "type": "string",
+          "enum": ["markdown", "file", "jira-mcp", "jira-api", "notion-mcp", "notion-api", "linear-mcp", "linear-api", "github-projects", "gitlab-issues", "browser"],
+          "default": "markdown"
+        },
+        "endpoint": { "type": ["string", "null"], "default": null },
+        "project_ref": { "type": ["string", "null"], "default": null },
+        "path_root": {
+          "type": ["string", "null"],
+          "description": "Override for the markdown/file driver's storage root. Falls back to loop.path_root, then '.'.",
+          "default": null
+        },
+        "auth": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "provider": { "type": "string", "enum": ["env", "opaq", "1password-cli", "pass", "vault", "aws-sm", "gcp-sm"] },
+            "secret_ref": { "type": "string" }
+          }
+        },
+        "artifact_mapping": { "type": "object", "additionalProperties": true },
+        "browser": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Configuration for the browser task-backend / fleet-discover drivers. C7 redesigned both to leverage Claude Code's native browser capability via the two-mode MCP pattern; the prior Docker-based runner is no longer used.",
+          "properties": {
+            "mcp_server": {
+              "type": "string",
+              "description": "Name of the MCP browser server the user has installed (e.g. 'playwright', 'browserbase', 'chrome-devtools'). The skill dispatches to the matching tool inside the Claude Code session. Optional when only the read-only webfetch fallback is needed."
+            },
+            "fallback": {
+              "type": "string",
+              "enum": ["webfetch", "none"],
+              "default": "webfetch",
+              "description": "Headless-mode behaviour when no Claude Code session is active. 'webfetch' uses curl for read-only verbs (task_list/task_get/...); 'none' refuses every verb."
+            }
+          }
+        }
+      }
+    },
+    "self_improve": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Behaviour of /<prefix>-self-improve and /mkt-self-improve.",
+      "properties": {
+        "scope": { "type": "string", "enum": ["auto", "marketplace", "target"], "default": "auto" },
+        "cadence_days": { "type": "integer", "minimum": 1, "maximum": 365, "default": 7 },
+        "audit_lifecycle_layer": { "type": "boolean", "default": true },
+        "audit_practice_currency": { "type": "boolean", "default": true }
+      }
+    },
+    "upgrade": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Behaviour of /<prefix>-upgrade and the SessionStart upgrade-nudge hook.",
+      "properties": {
+        "nudge_strategy": {
+          "type": "string",
+          "enum": ["auto", "always", "off"],
+          "default": "auto"
+        }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Agentic lifecycle layer (ADR 0007).",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "phases": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["charter", "brainstorm", "prd", "clarify", "plan", "tasks", "implement"] },
+          "default": ["charter", "brainstorm", "prd", "clarify", "plan", "tasks", "implement"]
+        },
+        "task_breakdown": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_phases": { "type": "integer", "minimum": 1, "default": 5 },
+            "max_tasks_per_phase": { "type": "integer", "minimum": 1, "default": 7 },
+            "require_validation_criterion": { "type": "boolean", "default": true }
+          }
+        },
+        "personas": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean", "default": false },
+            "set": { "type": "string", "enum": ["minimal", "bmad-default", "custom"], "default": "bmad-default" },
+            "custom_personas": { "type": ["array", "null"], "items": { "type": "object" }, "default": null }
+          }
+        },
+        "implement": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "parallelism": {
+              "oneOf": [
+                { "type": "integer", "minimum": 1 },
+                { "type": "string", "enum": ["auto"] }
+              ],
+              "default": 1
+            }
+          }
+        }
+      }
+    },
+    "profile": {
+      "type": "string",
+      "enum": ["minimal", "standard", "full"],
+      "default": "standard",
+      "description": "Selects which skills/drivers/providers bin/agentify renders into a target."
     }
   }
 }

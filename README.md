@@ -65,10 +65,13 @@ agentify-marketplace/
 │       ├── skills/
 │       │   ├── agentify/                # /agentify (first-run bootstrap entry-point)
 │       │   ├── agt-config/              # /agt-config (show/set/validate/init)
-│       │   ├── agt-loop/                # /agt-loop (start/status/stop)
 │       │   ├── agt-upgrade/             # /agt-upgrade (check/plan/apply)
 │       │   ├── agt-self-improve/        # /agt-self-improve (online audit)
-│       │   └── agt-feedback/            # /agt-feedback (gh issue create)
+│       │   └── agt-feedback/            # /agt-feedback (git_host issue_create)
+│       │   # H-28 fix: agt-loop lives at .claude/skills/agt-loop/ (root,
+│       │   # NOT plugins/agentify/skills/), because it's the marketplace's
+│       │   # own loop skill — targets render their own /<prefix>-loop via
+│       │   # the agentify-bootstrap step.
 │       ├── templates/
 │       │   └── migration.md             # MIGRATION-vN.M-to-vX.Y.md template
 │       └── context/                     # external-research, claude-code-mechanics, etc.

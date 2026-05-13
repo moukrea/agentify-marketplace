@@ -1,0 +1,73 @@
+name: release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish GitHub release
+    # H24 fix: tag glob 'v*.*.*' matches pre-releases like v1.2.3-rc1
+    # because `*` is greedy under GitHub's fnmatch. Filter pre-releases
+    # at the job level so a manual mis-tag (or a typo'd test tag) does
+    # NOT publish a permanent release.
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+        with:
+          fetch-depth: 0
+
+      - name: Install jq
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends jq
+
+      - name: Derive previous tag + version
+        id: ver
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF#refs/tags/}"
+          # H7 fix: derive the previous tag from the sorted tag list
+          # filtered to pure-SemVer entries (no pre-releases). Walking
+          # `${tag}^` could land on an off-branch parent on octopus
+          # merges, and on a root-tagged commit was undefined.
+          prev=$(git tag --sort=-version:refname \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | grep -A1 -Fx "$tag" | tail -n +2 | head -n 1 || true)
+          echo "tag=$tag" >>"$GITHUB_OUTPUT"
+          echo "prev=$prev" >>"$GITHUB_OUTPUT"
+
+      - name: Generate release notes
+        env:
+          PREV: ${{ steps.ver.outputs.prev }}
+        run: |
+          set -euo pipefail
+          if [ -n "$PREV" ]; then
+            bash bin/gen-changelog.sh --print --since "$PREV" >release_notes.md
+          else
+            bash bin/gen-changelog.sh --print >release_notes.md
+          fi
+          # H25 fix: refuse to publish an empty release. The prior code
+          # blindly published whatever release_notes.md contained, even if
+          # it was zero bytes (no new commits since the previous tag).
+          if [ ! -s release_notes.md ]; then
+            echo "::error::release_notes.md is empty; refusing to publish a no-op release"
+            exit 1
+          fi
+
+      - name: Publish via git_host abstraction
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -euo pipefail
+          bash plugins/agentify/lib/git_host.sh release_create \
+            "$TAG" "agentify $TAG" release_notes.md

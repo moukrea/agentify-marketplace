@@ -1,0 +1,47 @@
+name: Regression report
+description: Something that used to work is now broken.
+title: "[regression] "
+labels: ["agentify-feedback", "regression", "triage"]
+body:
+  - type: input
+    id: last_known_good
+    attributes:
+      label: Last known good version
+      placeholder: "4.2.5"
+    validations:
+      required: true
+  - type: input
+    id: first_broken
+    attributes:
+      label: First broken version
+      placeholder: "4.3.0"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction (commands)
+      render: bash
+    validations:
+      required: true
+  - type: textarea
+    id: what_changed
+    attributes:
+      label: Hypothesis (optional)
+      description: If you have a guess about what changed between the two versions, share it.
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - critical
+        - major
+        - moderate
+      default: 1
+    validations:
+      required: true
+  - type: input
+    id: feedback_id
+    attributes:
+      label: agentify-feedback-id
+      placeholder: "(optional)"

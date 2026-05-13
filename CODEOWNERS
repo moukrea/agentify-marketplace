@@ -1,0 +1,22 @@
+# Default owner for everything in this repository.
+* @moukrea
+
+# Migration documents gate the upgrade path for every target.
+# Any change here requires explicit maintainer review.
+/plugins/agentify/migrations/      @moukrea
+/plugins/agentify/.claude-plugin/  @moukrea
+/.claude-plugin/                   @moukrea
+
+# CI and release tooling.
+/.github/workflows/                @moukrea
+/bin/                              @moukrea
+
+# Schemas and contracts.
+/plugins/agentify/agentify-config.schema.json             @moukrea
+/plugins/agentify/audit-review-schema.json                @moukrea
+/finding-schema.json                                      @moukrea
+/plugins/agentify/prd-schema.json                         @moukrea
+/plugins/agentify/task-schema.json                        @moukrea
+/plugins/agentify/related-repos.schema.json               @moukrea
+/plugins/agentify/conventions/pinned-practices.schema.json @moukrea
+/plugins/agentify/prds/INDEX.schema.json                  @moukrea

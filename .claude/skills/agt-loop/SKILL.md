@@ -1,5 +1,6 @@
 ---
-description: Drive the AGENTIFY revise/review loop end-to-end (LOOP_PROMPT.md). Subcommands. start — enter the in-session loop. status — print loop state. stop — gracefully exit and write session summary.
+name: agt-loop
+description: Drive the AGENTIFY revise/review loop end-to-end. Subcommands — `start` enters the in-session loop, `status` prints the loop state, `stop` gracefully exits and writes a session summary.
 allowed-tools: Read Edit Write Bash Agent
 ---
 
@@ -37,10 +38,10 @@ if [ ! -f "$state_root/loop-state.json" ]; then
   "max_iterations": ${MAX_ITERATIONS:-6},
   "session_id": "$(date -u +%Y%m%dT%H%M%SZ)",
   "started_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "agentify_md_sha": "$(sha256sum AGENTIFY.md | cut -d' ' -f1)",
+  "agentify_md_sha": "$(sha256sum plugins/agentify/AGENTIFY.md | cut -d' ' -f1)",
   "last_verdict": null,
-  "last_counts": {"critical": 0, "major": 0, "moderate": 0, "strategic": 0, "polish": 0},
-  "prev_counts": {"critical": 0, "major": 0, "moderate": 0, "strategic": 0, "polish": 0},
+  "last_counts": {"critical": 0, "major": 0, "moderate": 0, "polish": 0, "info": 0},
+  "prev_counts": {"critical": 0, "major": 0, "moderate": 0, "polish": 0, "info": 0},
   "no_progress_streak": 0,
   "regression_streak": 0,
   "parked_findings": [],
@@ -80,6 +81,6 @@ Writes the session summary (idempotent) per `LOOP_PROMPT.md` §C5 conventions, a
 ## Notes
 
 - **State scope.** Inherits `STATE_ROOT` if set (lets an outer scope nest inner loops with their own state dir). When unset, defaults to `<loop.path_root>` from `agentify.config.json`, falling back to `.agents-work`.
-- **Concurrency.** The loop is single-instance per repo by design; the SessionStart sentinel `<state_root>/.loop-overlay-active` (per AGENTIFY.md §12.14) prevents multi-session races.
+- **Concurrency.** The loop is single-instance per repo by design; the SessionStart sentinel `<state_root>/.loop-overlay-active` (per `plugins/agentify/AGENTIFY.md` §12.14) prevents multi-session races.
 - **Exit conditions.** Per `LOOP_PROMPT.md` §C7: DONE / PARKED / STALLED / BUDGET_EXHAUSTED / REGRESSION / FAILURE / SUBAGENT_FAILURE.
 - **Difference from `/agentify`.** `/agentify` is the **first-run** target-side bootstrap (renders templates + walks Phase 0). `/agt-loop` is the **ongoing** development loop for steady-state work on the agentify project itself. They do not share state.

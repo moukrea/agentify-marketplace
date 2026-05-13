@@ -1,0 +1,71 @@
+name: Audit finding (human-authored)
+description: Contribute a finding directly to the audit pipeline. Mirrors finding-schema.json.
+title: "[finding] "
+labels: ["agentify-feedback", "human-finding", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form to file a finding you want folded into the next
+        `audits/` rollup. `/mkt-feedback-triage` converts well-formed
+        entries into a finding-schema entry automatically. Fields below
+        mirror finding-schema.json.
+  - type: input
+    id: title
+    attributes:
+      label: Title
+      description: One-line summary of the finding (becomes the audit-entry title).
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - critical
+        - major
+        - moderate
+        - polish
+        - info
+      default: 2
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - bug
+        - regression
+        - doc-gap
+        - schema-violation
+        - ci-broken
+        - manifest-drift
+        - governance-gap
+        - practice-drift
+        - feedback-recurring
+        - feature
+        - meta
+      default: 0
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+    validations:
+      required: true
+  - type: input
+    id: acceptance_criterion
+    attributes:
+      label: Acceptance criterion
+      description: A falsifiable check (grep / CI job / one-line shell) that proves the finding is resolved.
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: References (URLs)
+      description: One URL per line. Required — every finding needs at least one fetched reference.
+    validations:
+      required: true

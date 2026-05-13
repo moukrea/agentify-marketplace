@@ -1,0 +1,69 @@
+name: changelog-pr
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# H32 fix: two same-day pushes to main otherwise race on the dated
+# branch and the second `git push -u` collides with the first PR.
+# cancel-in-progress: true is safe here — the later run regenerates
+# whatever the earlier run would have produced.
+concurrency:
+  group: changelog-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    name: Refresh [Unreleased] in CHANGELOG.md
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+        with:
+          fetch-depth: 0
+
+      - name: Install jq
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends jq
+
+      - name: Regenerate
+        run: bash bin/gen-changelog.sh || true
+
+      - name: Open PR if CHANGELOG diff is non-empty
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet CHANGELOG.md plugins/agentify/BREAKING_CHANGES.md 2>/dev/null; then
+            echo "no changelog diff; nothing to PR"
+            exit 0
+          fi
+          branch="bot/changelog-$(date -u +%Y-%m-%d)"
+          git config user.name  "agentify-bot"
+          # H37 fix: RFC 2606 reserved TLD; some hooks reject TLD-less.
+          git config user.email "agentify-bot@agentify-marketplace.invalid"
+          git switch -c "$branch"
+          git add CHANGELOG.md plugins/agentify/BREAKING_CHANGES.md 2>/dev/null || true
+          git commit -m "chore(changelog): refresh [Unreleased] from conventional commits"
+          git push -u origin "$branch"
+
+          # B-1 fix: H29's tempfile approach was correct in shape but
+          # the inline HEREDOC body in YAML had an indented terminator
+          # (`BODY` at column 11), which bash never matched against
+          # `<<'BODY'` (only `<<-` strips leading whitespace, and only
+          # tabs). Result: the HEREDOC slurped every subsequent line,
+          # including the `git_host.sh pr_create` invocation itself,
+          # so the PR-open command silently never ran. Fix: lift the
+          # body content into bin/changelog-pr-body.sh — no HEREDOC in
+          # YAML, no indentation footgun.
+          body_tmp=$(mktemp)
+          trap 'rm -f "$body_tmp"' EXIT
+          bash bin/changelog-pr-body.sh >"$body_tmp"
+          bash plugins/agentify/lib/git_host.sh pr_create \
+            "chore(changelog): refresh [Unreleased]" \
+            "$body_tmp" \
+            main "$branch"

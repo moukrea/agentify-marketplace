@@ -1,4 +1,4 @@
-# AGENTIFY — Bootstrap a production-grade agentic harness on any repository (v4.3)
+# AGENTIFY — Bootstrap a production-grade agentic harness on any repository (v4.4)
 
 > Paste this file as the first prompt of a fresh Claude Code session at the root of the repository you want to agentify. Start with `--permission-mode plan` so the native plan-approval flow runs at the end of Phase 1.
 

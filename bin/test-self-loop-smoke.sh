@@ -33,7 +33,7 @@ ng()   { printf '  FAIL: %s\n' "$1"; fail=$((fail+1)); }
 echo "=== self-loop smoke: SKILL.md sanity ==="
 SKILL=".claude/skills/agt-loop/SKILL.md"
 test -f "$SKILL" && pass "$SKILL exists" || ng "$SKILL missing"
-head -1 "$SKILL" | grep -q '^---$' && pass "SKILL.md has frontmatter delimiter" \
+head -n 1 "$SKILL" | grep -q '^---$' && pass "SKILL.md has frontmatter delimiter" \
                                    || ng "SKILL.md frontmatter missing"
 grep -q 'allowed-tools:' "$SKILL" && pass "SKILL.md declares allowed-tools" \
                                   || ng "SKILL.md missing allowed-tools"

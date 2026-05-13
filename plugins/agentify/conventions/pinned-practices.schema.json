@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "pinned-practices",
+  "description": "Change-detection state file for /mkt-practice-evolve. Keyed by source id from sources.yaml; tracks last-checked-at, content hash, distillations, and per-recommendation adoption state.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pinned_at", "sources"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "pinned_at": { "type": "string", "format": "date-time" },
+    "sources": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["last_checked_at"],
+        "properties": {
+          "last_checked_at": { "type": "string", "format": "date-time" },
+          "last_content_hash": { "type": "string" },
+          "etag": { "type": "string" },
+          "last_modified": { "type": "string" },
+          "transport_error": { "type": "string" },
+          "distillations": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "adoptions": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status"],
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": ["adopted", "partial", "not_adopted", "not_applicable", "unknown"]
+                },
+                "ref": { "type": "string" },
+                "rationale": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

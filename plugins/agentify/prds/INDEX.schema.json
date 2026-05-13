@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/moukrea/agentify-marketplace/main/plugins/agentify/prds/INDEX.schema.json",
+  "title": "agentify-prds-index",
+  "description": "Schema for prds/INDEX.json, the registry that maps PRD ids to their directories. Written by task_backend_drivers/markdown.sh:markdown__alloc_prd_id under a flock. Every prd_create call also appends an entries[] row (post-C6 fix: the append now happens INSIDE the same lock so concurrent prd_create calls don't lose entries).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["next_id", "entries"],
+  "properties": {
+    "next_id": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Next zero-padded four-digit id to allocate. markdown__alloc_prd_id increments this under flock."
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "slug", "title", "dir", "created_at"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[0-9]{4}$" },
+          "slug": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "dir": { "type": "string", "minLength": 1 },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,79 @@
+name: practice-evolve
+
+on:
+  schedule:
+    - cron: "11 4 * * 1"  # weekly, Mondays 04:11 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# H32: concurrency block — workflow_dispatch overlapping a scheduled run
+# would otherwise race on the dated bot branch.
+concurrency:
+  group: practice-evolve
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    name: Fetch tracked practice sources
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+        with:
+          fetch-depth: 0
+
+      - name: Install jq + curl
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends jq curl pandoc
+
+      - name: Fetch every source whose cadence has elapsed
+        run: |
+          set -euo pipefail
+          # M-39 fix: iterate with `while read` to avoid word-splitting
+          # source ids on whitespace + accidental glob expansion against
+          # the workspace.
+          while IFS= read -r id; do
+            [ -z "$id" ] && continue
+            echo "--- fetching $id ---"
+            bash plugins/agentify/lib/practice_track.sh fetch "$id" || true
+          done < <(bash plugins/agentify/lib/practice_track.sh list_sources \
+                   | jq -r '.sources[].id')
+
+      - name: Open PR if any new raw/ content was captured
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet plugins/agentify/practices/ plugins/agentify/conventions/pinned-practices.json 2>/dev/null; then
+            echo "no upstream change detected; nothing to PR"
+            exit 0
+          fi
+          branch="bot/practice-evolve-$(date -u +%Y-%m-%d)"
+          git config user.name  "agentify-bot"
+          git config user.email "agentify-bot@agentify-marketplace.invalid"
+          git switch -c "$branch"
+          git add plugins/agentify/practices plugins/agentify/conventions/pinned-practices.json
+          git commit -m "chore(practices): weekly practice-evolve fetch"
+          git push -u origin "$branch"
+          gh pr create \
+            --base main --head "$branch" \
+            --title "chore(practices): weekly practice-evolve fetch" \
+            --body "$(cat <<'EOF'
+Automated fetch by practice-evolve.yml.
+
+Captures new content from sources in
+`plugins/agentify/conventions/sources.yaml` since the last successful
+fetch. Distillation + adoption-check runs interactively next time a
+maintainer invokes `/mkt-practice-evolve` (or as Phase 8 of
+`/mkt-self-improve`).
+
+Reviewer checklist:
+- [ ] Raw content under `plugins/agentify/practices/raw/` looks
+  reasonable (no captcha pages / dead links).
+- [ ] No source flagged `transport_error` in
+  `plugins/agentify/conventions/pinned-practices.json`.
+EOF
+)"

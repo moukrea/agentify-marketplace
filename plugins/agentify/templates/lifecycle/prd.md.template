@@ -1,0 +1,37 @@
+---
+prd_id: {{prd_id}}
+title: {{title}}
+state: draft
+backend_ref: {{backend_ref}}
+created_at: {{timestamp}}
+last_updated_at: {{timestamp}}
+---
+
+# PRD: {{title}}
+
+## User stories
+1. As a <role>, I want <capability> so that <outcome>.
+
+## Functional requirements
+- FR-1: <…>
+- FR-2: <…>
+
+## Non-functional requirements
+- NFR-1: <…>
+
+## Out of scope
+- <…>
+
+## Acceptance criteria
+<every criterion must be falsifiable — a real check a human or CI can run.
+agt-prd refuses to ship a PRD whose AC section contains vague phrases:
+"looks good", "tbd", "nice", or "ok" (case-insensitive, word-boundary).>
+- AC-1: <…>
+- AC-2: <…>
+
+## Open Questions
+<Questions that survived agt-clarify (deferred), plus any new
+ambiguity surfaced during agt-plan / agt-tasks. Each entry: closed
+question + the phase it must be resolved by. agt-clarify mirrors
+unanswered Q&A from clarifications.md here so they don't get lost.>
+- _none yet_
