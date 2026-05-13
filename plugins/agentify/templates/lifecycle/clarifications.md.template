@@ -1,0 +1,39 @@
+---
+prd_ref: __PRD_REF__
+state: in_progress
+created_at: __CREATED_AT__
+last_updated_at: __LAST_UPDATED_AT__
+---
+
+# Clarifications: __PRD_TITLE__
+
+Logged Q&A trail of the `/agt-clarify` interactive session against
+[__PRD_REF__](./prd.md). Each question must be a CLOSED (binary or
+multiple-choice) question — open-ended questions belong in the PRD's
+`## Open Questions` section, not here.
+
+## Resolved
+
+| # | Question | Answer | Decided by | Decided at |
+| - | -------- | ------ | ---------- | ---------- |
+| Q1 | _Replace with the closed question the maintainer answered._ | _Replace with the chosen answer; cite the PRD section the answer updates._ | _Maintainer name or `agentify-bot` for self-driven defaults._ | _ISO-8601 timestamp._ |
+
+## Deferred
+
+Questions the maintainer chose NOT to answer in this session. `agt-clarify`
+copies these into the PRD's `## Open Questions` section so they survive
+into `agt-plan`.
+
+| # | Question | Reason for deferral |
+| - | -------- | -------------------- |
+| Q? | _The unanswered question._ | _Why now is the wrong time to answer (e.g. depends on phase 2 implementation, requires external stakeholder input)._ |
+
+## Notes
+
+- Every resolved question MUST cite the PRD section it updates so a
+  reviewer can trace the answer back to a normative requirement.
+- `agt-clarify` refuses to mark a question Resolved without a `Decided
+  by` value; ambiguity here defeats the purpose of the clarify phase.
+- Deferred entries do NOT silently drop — they live in the PRD's
+  `## Open Questions` and surface again in `agt-plan` as either a Plan
+  decision or a follow-up clarify pass.

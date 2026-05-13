@@ -1,5 +1,5 @@
 ---
-description: Draft a structured feedback report from a target repo and submit via gh issue create to the configured upstream agentify-marketplace repo. Asks the engineer for the four free-text fields, generates a UUID, presents the body for confirmation, then submits. --dry-run prints the issue body without submitting.
+description: Draft a structured feedback report from a target repo and submit via git_host issue_create (works on github / gitlab / gitea / codeberg / generic-rest tenants) to the configured upstream agentify-marketplace repo. Asks the engineer for the four free-text fields, generates a UUID, presents the body for confirmation, then submits. --dry-run prints the issue body without submitting.
 allowed-tools: Read Bash
 ---
 
@@ -116,18 +116,21 @@ if [ "${dry_run:-0}" -eq 1 ]; then
   echo "----"
   printf '%s\n' "$body"
   echo "----"
-  echo "[dry-run] gh issue create --repo $upstream_repo --title '[feedback] $one_liner' --label agentify-feedback,triage --body-file -"
+  echo "[dry-run] git_host issue_create --repo $upstream_repo [feedback] $one_liner (labels: agentify-feedback,triage)"
   exit 0
 fi
 
 read -r -p "Submit to $upstream_repo? (y/N) " ans
 case "$ans" in
   y|Y)
-    issue_url=$(printf '%s' "$body" | gh issue create \
+    # Route through the git_host abstraction so this works on github /
+    # gitlab / gitea / codeberg / generic-rest tenants (per ADR 0002).
+    body_tmp=$(mktemp); printf '%s\n' "$body" >"$body_tmp"
+    trap 'rm -f "$body_tmp"' EXIT
+    issue_url=$(bash "${CLAUDE_PLUGIN_ROOT:-plugins/agentify}/lib/git_host.sh" issue_create \
       --repo "$upstream_repo" \
-      --title "[feedback] $one_liner" \
-      --label agentify-feedback,triage \
-      --body-file -)
+      "[feedback] $one_liner" "$body_tmp" \
+      agentify-feedback triage)
     echo "Submitted: $issue_url"
     echo "Track via: gh issue view $(basename "$issue_url")"
     echo "Upstream maintainer's /agt-self-improve will pick this up on the next audit."

@@ -7,7 +7,9 @@ allowed-tools: WebSearch WebFetch Read Bash Edit Write
 
 Periodic (recommended weekly via `claude /loop 7d /agt-self-improve`) or on-demand audit of the agentify project. Detects drift between the cached `context/` bundle and current Claude Code documentation / GitHub issue tracker / Anthropic engineering blog, plus drift signaled by open `/agt-feedback` issues from target repos.
 
-Output: a structured-review file at `audits/<timestamp>.md` conforming to [`plugins/agentify/audit-review-schema.json`](../../audit-review-schema.json). The file carries the synthetic-source marker so `REVISE_AGENTIFY_PROMPT.md` (per WS-F-003) recognizes it as machine-produced and routes it through the mandatory human-review gate before applying.
+Output: a structured-review file at `audits/<timestamp>.md` conforming to [`finding-schema.json`](../../../../finding-schema.json) (v2, post-C3). The file carries the WS-F-003 synthetic-source marker so human reviewers can detect a machine-produced audit and require explicit human-review sign-off before applying findings.
+
+> **Schema migration.** Prior releases emitted to `audit-review-schema.json` (v1). v2 is a breaking redesign — see ADR 0001. Existing v1 audits are migrated by `bash bin/migrate-audits-v1-to-v2.sh --apply audits/` (idempotent). New audits emitted by this skill are v2 from the start.
 
 ## Usage
 
@@ -37,7 +39,7 @@ Output: a structured-review file at `audits/<timestamp>.md` conforming to [`plug
 
    # Self-improve audit — <date>
 
-   <YAML or JSON frontmatter conforming to audit-review-schema.json>
+   <YAML or JSON frontmatter conforming to finding-schema.json (v2)>
    ---
 
    ## Findings
@@ -135,9 +137,10 @@ $(jq -n --arg id "$audit_id" \
 $(echo "$findings_json" | jq -r '.[] | "### \(.id): \(.severity) — \(.title)\n\n\(.description)\n\nReferences: \(.references | map(.url) | join(", "))\nAcceptance: \(.acceptance_criterion)\n"')
 EOF
 
-# Validate against schema
+# Validate against schema (post-C3: finding-schema.json v2 is canonical).
 if command -v ajv >/dev/null 2>&1; then
-  ajv validate -s plugins/agentify/audit-review-schema.json -d <(extract_json "$audit_path") \
+  ajv validate -s finding-schema.json -d <(extract_json "$audit_path") \
+    --spec=draft2020 -c ajv-formats \
     || { echo "ERROR: audit failed schema validation" >&2; exit 1; }
 fi
 
