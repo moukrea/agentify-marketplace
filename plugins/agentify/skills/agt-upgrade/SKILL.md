@@ -1,4 +1,5 @@
 ---
+name: agt-upgrade
 description: Detect installed agentify version and migrate to the latest. Subcommands. check — show current + available versions. plan — summarize the relevant migrations/vN.M-to-vX.Y.md. apply — interactive walkthrough; auto-applies non-breaking steps and pauses on breaking ones.
 allowed-tools: Read Edit Write Bash
 ---

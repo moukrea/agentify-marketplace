@@ -1,0 +1,113 @@
+name: Create release tag
+
+# Manual dispatch — creates an annotated git tag at the chosen ref and
+# pushes it to origin. Solves the "I can't push tags from my terminal /
+# sandbox" friction surfaced during the v4.4.0 release: the operator
+# clicks Run workflow → fills in tag name + optional message → the
+# bot creates and pushes the tag, which then fires release.yml.
+#
+# Trigger: workflow_dispatch only. NEVER auto-triggers; releases should
+# be deliberate.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Tag to create (e.g. v4.4.0). Must match /^v[0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.-]+)?$/."
+        required: true
+        type: string
+      target_sha:
+        description: "Commit SHA or ref to tag (default: current main HEAD)."
+        required: false
+        default: "main"
+        type: string
+      message:
+        description: "Annotated-tag message. Defaults to a sensible release line."
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: write   # to push the tag back to origin
+
+concurrency:
+  group: create-tag-${{ inputs.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  create-tag:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+        with:
+          fetch-depth: 0   # full history so we can tag arbitrary refs
+
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          tag='${{ inputs.tag_name }}'
+          # Strict semver-with-optional-prerelease. Matches what
+          # bin/bump-version.sh accepts (per the C9 fix).
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+            echo "::error::tag name '$tag' does not match ^v[0-9]+.[0-9]+.[0-9]+(-prerelease)?\$"
+            exit 64
+          fi
+          # Refuse to overwrite an existing tag (tags are intended to
+          # be immutable). If the user genuinely needs to move the tag,
+          # they can delete it manually first.
+          if git rev-parse "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "::error::tag '$tag' already exists on origin; refusing to overwrite"
+            exit 65
+          fi
+
+      - name: Resolve target sha
+        id: target
+        run: |
+          set -euo pipefail
+          target='${{ inputs.target_sha }}'
+          sha=$(git rev-parse --verify "$target^{commit}") \
+            || { echo "::error::cannot resolve target '$target'"; exit 64; }
+          echo "sha=$sha" >>"$GITHUB_OUTPUT"
+          echo "target sha resolved to: $sha"
+
+      - name: Verify manifest version matches the tag
+        run: |
+          set -euo pipefail
+          tag='${{ inputs.tag_name }}'
+          want="${tag#v}"   # strip leading v
+          plugin_ver=$(git show '${{ steps.target.outputs.sha }}:plugins/agentify/.claude-plugin/plugin.json' \
+            | jq -r '.version')
+          if [ "$plugin_ver" != "$want" ]; then
+            echo "::error::tag '$tag' does not match plugin.json version '$plugin_ver' at the target commit"
+            echo "::error::either bump the manifest (bin/bump-version.sh) or correct the tag input"
+            exit 65
+          fi
+          marketplace_ver=$(git show '${{ steps.target.outputs.sha }}:.claude-plugin/marketplace.json' \
+            | jq -r '.plugins[0].version')
+          if [ "$marketplace_ver" != "$want" ]; then
+            echo "::error::tag '$tag' does not match marketplace.json plugin version '$marketplace_ver'"
+            exit 65
+          fi
+
+      - name: Create + push annotated tag
+        env:
+          DEFAULT_MESSAGE: "Release ${{ inputs.tag_name }} — see CHANGELOG.md for full notes"
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          msg='${{ inputs.message }}'
+          [ -z "$msg" ] && msg="$DEFAULT_MESSAGE"
+          git tag -a '${{ inputs.tag_name }}' '${{ steps.target.outputs.sha }}' -m "$msg"
+          git push origin 'refs/tags/${{ inputs.tag_name }}'
+
+      - name: Summary
+        run: |
+          {
+            echo "### Tag created"
+            echo ""
+            echo "- **tag**: \`${{ inputs.tag_name }}\`"
+            echo "- **sha**: \`${{ steps.target.outputs.sha }}\`"
+            echo ""
+            echo "release.yml should now fire on the tag push and publish the GitHub release."
+          } >>"$GITHUB_STEP_SUMMARY"

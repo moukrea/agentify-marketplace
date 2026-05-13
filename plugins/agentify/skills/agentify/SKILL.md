@@ -1,4 +1,5 @@
 ---
+name: agentify
 description: Bootstrap a production-grade agentic harness on the current repository. Resolves config from agentify.config.json (or skill args), renders templates from the plugin install, then walks the agent through AGENTIFY.md's bootstrap on the target. Use --dry-run to preview without writing.
 allowed-tools: Read Edit Write Bash
 ---

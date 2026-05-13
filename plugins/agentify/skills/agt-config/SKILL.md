@@ -1,4 +1,5 @@
 ---
+name: agt-config
 description: Inspect and edit the agentify plugin config (project-root agentify.config.json). Subcommands. show — print resolved config. set — update a field. validate — check against agentify-config.schema.json.
 allowed-tools: Read Edit Write Bash
 ---

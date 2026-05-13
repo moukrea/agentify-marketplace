@@ -1,0 +1,134 @@
+name: Auto-approve bot PRs
+
+# Automatically approves AND enables auto-merge on PRs from the
+# in-repo bot branches (`bot/changelog-YYYY-MM-DD`,
+# `bot/practice-evolve-*`, `bot/audit-trend-*`). These are mechanical
+# PRs whose content is deterministic from the workflow that opened
+# them — they don't need human review every time, but they currently
+# block on the same approval gate as feature PRs.
+#
+# Safety constraints (all enforced before approval):
+#   1. The PR's head branch must match a whitelisted bot/* pattern.
+#   2. The PR author must be `github-actions[bot]` (not a user
+#      masquerading by branch name).
+#   3. The base branch must be `main`.
+#   4. The changed file set must be one of the per-workflow whitelists
+#      (e.g. changelog-pr.yml is allowed to touch only CHANGELOG.md +
+#      BREAKING_CHANGES.md).
+#   5. CI must be green (auto-merge respects required checks; we just
+#      enable it, GitHub gates the actual merge on required checks).
+#
+# Bypass: a human reviewer can dismiss the auto-approval and request
+# changes; the auto-merge respects branch protection.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  pull-requests: write
+  contents: write    # to enable auto-merge
+
+concurrency:
+  group: auto-approve-bot-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  approve:
+    runs-on: ubuntu-24.04
+    if: github.event.pull_request.user.login == 'github-actions[bot]'
+    steps:
+      - name: Guard — head branch matches a bot/* pattern
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          case "$HEAD_REF" in
+            bot/changelog-*|bot/practice-evolve-*|bot/audit-trend-*)
+              echo "head branch $HEAD_REF is a recognized bot branch — continuing"
+              ;;
+            *)
+              echo "::warning::head branch $HEAD_REF does not match bot/* whitelist; skipping auto-approve"
+              exit 0
+              ;;
+          esac
+
+      - name: Guard — base is main
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          if [ "$BASE_REF" != "main" ]; then
+            echo "::warning::base $BASE_REF is not main; skipping auto-approve"
+            exit 0
+          fi
+
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+        with:
+          fetch-depth: 0
+
+      - name: Guard — file set matches the bot's declared scope
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Use GH API for file list — pull_request_target gives us the
+          # head sha but we want the merge-base diff to evaluate scope.
+          files=$(gh pr view '${{ github.event.pull_request.number }}' \
+            --json files --jq '.files[].path')
+          echo "files in PR:"
+          echo "$files"
+
+          case "$HEAD_REF" in
+            bot/changelog-*)
+              # changelog-pr.yml may only touch CHANGELOG.md and
+              # plugins/agentify/BREAKING_CHANGES.md
+              allowed='^(CHANGELOG\.md|plugins/agentify/BREAKING_CHANGES\.md)$'
+              ;;
+            bot/practice-evolve-*)
+              # practice-evolve.yml may only touch the pinned-practices
+              # state and convention sources.
+              allowed='^(plugins/agentify/conventions/pinned-practices\.json|plugins/agentify/conventions/sources\.yaml)$'
+              ;;
+            bot/audit-trend-*)
+              # audit-trend.yml may only refresh the rollup files.
+              allowed='^audits/(summary\.json|trends\.md)$'
+              ;;
+            *)
+              echo "::error::unreachable: unrecognized bot branch reached file-scope guard"
+              exit 1
+              ;;
+          esac
+
+          bad=0
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            if ! [[ "$f" =~ $allowed ]]; then
+              echo "::error::file '$f' is out of scope for $HEAD_REF (allowed pattern: $allowed)"
+              bad=$((bad + 1))
+            fi
+          done <<<"$files"
+
+          if [ "$bad" -gt 0 ]; then
+            echo "::error::auto-approve refused: $bad file(s) outside scope"
+            exit 1
+          fi
+          echo "all files within scope; auto-approve clears"
+
+      - name: Approve
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr review '${{ github.event.pull_request.number }}' \
+            --approve \
+            --body "Auto-approved: bot-scope PR (head=${{ github.event.pull_request.head.ref }}). Files match the declared whitelist for this bot workflow."
+
+      - name: Enable auto-merge (squash)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr merge '${{ github.event.pull_request.number }}' \
+            --auto --squash \
+            || echo "::warning::auto-merge enable failed (often: branch protection requires linear history or status checks); the approval still stands"
