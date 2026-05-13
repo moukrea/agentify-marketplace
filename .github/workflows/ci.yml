@@ -79,10 +79,23 @@ jobs:
           # H30 fix: pin pip dependencies to specific versions so a
           # poisoned upstream release can't trojanize the lint runner.
           python3 -m pip install --quiet 'jsonschema==4.23.0'
+          # B-5 fix: the prior step pip-installed jsonschema then did
+          # `python3 -c "import json; json.load(open('$s'))"` — pure JSON
+          # parse, no schema validation. A schema with malformed `enum`,
+          # bad `$ref`, or invalid `$schema` URI passed silently.
+          # Replace with a real `check_schema()` call that walks the
+          # meta-schema (Draft 2020-12). Also `ajv`-validate
+          # agentify.config.json against its schema while we have ajv
+          # available (smoke-validates the dogfood).
           for s in $(git ls-files '*-schema.json'); do
-            python3 -c "import json,sys; json.load(open('$s'))" \
-              && echo "$s parses ok" \
-              || { echo "::error file=$s::schema parse failed"; exit 1; }
+            python3 -c "
+import json, sys
+from jsonschema import Draft202012Validator
+s = sys.argv[1]
+doc = json.load(open(s))
+Draft202012Validator.check_schema(doc)
+print(f'{s} schema OK')
+" "$s" || { echo "::error file=$s::schema validation failed"; exit 1; }
           done
 
   manifest-conformance:
