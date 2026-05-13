@@ -80,6 +80,33 @@ validate_one() {
 		return 1
 	fi
 
+	# H23 fix: reject any document still containing the {__AGT_FILL__}
+	# sentinel — the template carries it so the validator catches
+	# authors who land a migration whose body was never edited beyond
+	# the {FROM}/{TO} substitution. Also reject any leftover
+	# {SOMETHING} placeholder OUTSIDE fenced code blocks (the template
+	# uses {FROM}, {TO}, {BREAKING|non-breaking} and arbitrary
+	# {description} markers; new-migration.sh replaces FROM/TO/sev but
+	# the author has to fill in the rest).
+	if grep -Fq -- '{__AGT_FILL__}' "$f"; then
+		err "$f: contains {__AGT_FILL__} sentinel — replace it with real content before validating"
+		return 1
+	fi
+	# Walk the file, ignoring lines inside ```...``` fenced blocks, and
+	# reject any {<UPPERCASE_PLACEHOLDER>} pattern that should have been
+	# substituted.
+	local leftover
+	leftover=$(awk '
+		BEGIN { infence = 0 }
+		/^```/ { infence = !infence; next }
+		!infence && /\{[A-Z_][A-Z0-9_|]*\}/ { print NR ": " $0 }
+	' "$f")
+	if [ -n "$leftover" ]; then
+		err "$f: leftover {PLACEHOLDER} markers outside code fences"
+		printf '%s\n' "$leftover" >&2
+		return 1
+	fi
+
 	return 0
 }
 

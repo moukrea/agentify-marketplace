@@ -31,8 +31,9 @@ while [ "$#" -gt 0 ]; do
 done
 
 current=$(jq -r '.version' "$PLUGIN_MANIFEST")
-if ! [[ "$current" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-	echo "bump-version: current version $current not SemVer" >&2
+# Accept SemVer 2.0 with optional pre-release / build metadata.
+if ! [[ "$current" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+	echo "bump-version: current version $current not SemVer 2.0" >&2
 	exit 2
 fi
 major=${BASH_REMATCH[1]}
@@ -96,15 +97,10 @@ if git rev-parse -q --verify "refs/tags/v${new_version}" >/dev/null; then
 	exit 2
 fi
 
-# Sync manifests.
-jq --arg v "$new_version" '.version = $v' "$PLUGIN_MANIFEST" \
-	>"$PLUGIN_MANIFEST.tmp" && mv "$PLUGIN_MANIFEST.tmp" "$PLUGIN_MANIFEST"
-jq --arg v "$new_version" '.plugins[0].version = $v' "$MARKETPLACE_MANIFEST" \
-	>"$MARKETPLACE_MANIFEST.tmp" && mv "$MARKETPLACE_MANIFEST.tmp" "$MARKETPLACE_MANIFEST"
-
-# Require the paired migration doc when the version actually changes
-# (the migration-gate CI job enforces this on PR; this is the local
-# guard for the release driver).
+# H26 fix: check the paired migration doc BEFORE touching either
+# manifest. The old order wrote plugin.json + marketplace.json first,
+# then checked for the migration — if missing, the working tree was
+# left with a torn version state.
 if [ "$current" != "$new_version" ]; then
 	migration="$REPO_ROOT/plugins/agentify/migrations/v${current}-to-v${new_version}.md"
 	if [ ! -f "$migration" ]; then
@@ -112,6 +108,17 @@ if [ "$current" != "$new_version" ]; then
 		exit 2
 	fi
 fi
+
+# Stage both writes into tempfiles first; only mv after both succeed.
+# If either jq fails, the tree stays consistent.
+plugin_tmp=$(mktemp); marketplace_tmp=$(mktemp)
+trap 'rm -f "$plugin_tmp" "$marketplace_tmp"' EXIT
+jq --arg v "$new_version" '.version = $v' "$PLUGIN_MANIFEST" >"$plugin_tmp"
+jq --arg v "$new_version" '.plugins[0].version = $v' "$MARKETPLACE_MANIFEST" >"$marketplace_tmp"
+# At this point both rewrites succeeded; commit atomically.
+mv "$plugin_tmp" "$PLUGIN_MANIFEST"
+mv "$marketplace_tmp" "$MARKETPLACE_MANIFEST"
+trap - EXIT
 
 # Stage the changes; the caller (or /mkt-release) commits + tags.
 git add "$PLUGIN_MANIFEST" "$MARKETPLACE_MANIFEST"

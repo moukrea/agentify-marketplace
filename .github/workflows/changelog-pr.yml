@@ -8,6 +8,14 @@ permissions:
   contents: write
   pull-requests: write
 
+# H32 fix: two same-day pushes to main otherwise race on the dated
+# branch and the second `git push -u` collides with the first PR.
+# cancel-in-progress: true is safe here — the later run regenerates
+# whatever the earlier run would have produced.
+concurrency:
+  group: changelog-pr-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   refresh:
     name: Refresh [Unreleased] in CHANGELOG.md
@@ -36,12 +44,24 @@ jobs:
           fi
           branch="bot/changelog-$(date -u +%Y-%m-%d)"
           git config user.name  "agentify-bot"
-          git config user.email "bot@agentify-marketplace"
+          # H37 fix: RFC 2606 reserved TLD; some hooks reject TLD-less.
+          git config user.email "agentify-bot@agentify-marketplace.invalid"
           git switch -c "$branch"
           git add CHANGELOG.md plugins/agentify/BREAKING_CHANGES.md 2>/dev/null || true
           git commit -m "chore(changelog): refresh [Unreleased] from conventional commits"
           git push -u origin "$branch"
+
+          # H29 fix: write the PR body to a tempfile rather than passing
+          # via `<(printf …)` process substitution. The /dev/fd lifetime
+          # ends with the outer pipeline, so the child gh process saw an
+          # empty file by the time it read the FD.
+          body_tmp=$(mktemp)
+          trap 'rm -f "$body_tmp"' EXIT
+          cat >"$body_tmp" <<'BODY'
+          Automated [Unreleased] regen by changelog-pr.yml.
+          Review before /mkt-release tags a version.
+          BODY
           bash plugins/agentify/lib/git_host.sh pr_create \
             "chore(changelog): refresh [Unreleased]" \
-            <(printf 'Automated [Unreleased] regen by changelog-pr.yml.\nReview before /mkt-release tags a version.\n') \
+            "$body_tmp" \
             main "$branch"

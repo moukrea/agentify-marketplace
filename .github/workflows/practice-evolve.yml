@@ -9,6 +9,12 @@ permissions:
   contents: write
   pull-requests: write
 
+# H32: concurrency block — workflow_dispatch overlapping a scheduled run
+# would otherwise race on the dated bot branch.
+concurrency:
+  group: practice-evolve
+  cancel-in-progress: false
+
 jobs:
   fetch:
     name: Fetch tracked practice sources
@@ -26,12 +32,15 @@ jobs:
       - name: Fetch every source whose cadence has elapsed
         run: |
           set -euo pipefail
-          ids=$(bash plugins/agentify/lib/practice_track.sh list_sources \
-                | jq -r '.sources[].id')
-          for id in $ids; do
+          # M-39 fix: iterate with `while read` to avoid word-splitting
+          # source ids on whitespace + accidental glob expansion against
+          # the workspace.
+          while IFS= read -r id; do
+            [ -z "$id" ] && continue
             echo "--- fetching $id ---"
             bash plugins/agentify/lib/practice_track.sh fetch "$id" || true
-          done
+          done < <(bash plugins/agentify/lib/practice_track.sh list_sources \
+                   | jq -r '.sources[].id')
 
       - name: Open PR if any new raw/ content was captured
         env:
@@ -44,7 +53,7 @@ jobs:
           fi
           branch="bot/practice-evolve-$(date -u +%Y-%m-%d)"
           git config user.name  "agentify-bot"
-          git config user.email "bot@agentify-marketplace"
+          git config user.email "agentify-bot@agentify-marketplace.invalid"
           git switch -c "$branch"
           git add plugins/agentify/practices plugins/agentify/conventions/pinned-practices.json
           git commit -m "chore(practices): weekly practice-evolve fetch"

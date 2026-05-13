@@ -9,6 +9,12 @@ permissions:
   contents: write
   pull-requests: write
 
+# H32: concurrency block — workflow_dispatch overlapping a scheduled run
+# would otherwise race on the dated bot branch.
+concurrency:
+  group: audit-trend
+  cancel-in-progress: false
+
 jobs:
   rebuild:
     name: Rebuild audits/summary.json + trends.md
@@ -37,7 +43,7 @@ jobs:
           fi
           branch="bot/audit-trend-$(date -u +%Y-%m-%d)"
           git config user.name  "agentify-bot"
-          git config user.email "bot@agentify-marketplace"
+          git config user.email "agentify-bot@agentify-marketplace.invalid"
           git switch -c "$branch"
           git add audits/summary.json audits/trends.md
           git commit -m "chore(audits): nightly trend rollup"

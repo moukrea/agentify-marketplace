@@ -60,12 +60,15 @@ main() {
 	[ -z "$from" ] && usage
 	[ -z "$to" ] && usage
 
-	if ! [[ "$from" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-		echo "new-migration: invalid <from> (need X.Y.Z): $from" >&2
+	# Accept SemVer 2.0 inputs including pre-release identifiers
+	# (e.g. 4.4.0-rc.1) and build metadata (e.g. 4.4.0+sha.abc1234).
+	local semver_re='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
+	if ! [[ "$from" =~ $semver_re ]]; then
+		echo "new-migration: invalid <from> (need X.Y.Z[-pre][+meta]): $from" >&2
 		exit 2
 	fi
-	if ! [[ "$to" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-		echo "new-migration: invalid <to> (need X.Y.Z): $to" >&2
+	if ! [[ "$to" =~ $semver_re ]]; then
+		echo "new-migration: invalid <to> (need X.Y.Z[-pre][+meta]): $to" >&2
 		exit 2
 	fi
 
@@ -91,25 +94,48 @@ main() {
 		-e "s/{BREAKING|non-breaking}/$severity/g" \
 		"$TEMPLATE" >"$dest"
 
-	# Append index row (above the "## Append-only" section so the table
-	# stays first). We use awk to insert before the first line that starts
-	# with "## Append-only".
-	local row="| ${from}    | ${to}    | [v${from}-to-v${to}.md](v${from}-to-v${to}.md) | ${severity} | _Author: fill in summary._ |"
+	# Insert the new row INTO the existing table — the prior code inserted
+	# before "## Append-only" but the existing blank-line above that
+	# heading then split the markdown table in half (markdown terminates
+	# a table on a blank line). H22 fix: locate the last `| <digit>` row
+	# and insert immediately after it; align column widths to the header.
+	local row
+	row=$(printf '| %-8s | %-8s | [v%s-to-v%s.md](v%s-to-v%s.md) | %-12s | _Author: fill in summary._ |' \
+		"$from" "$to" "$from" "$to" "$from" "$to" "$severity")
 	awk -v row="$row" '
-		BEGIN { inserted = 0 }
-		/^## Append-only/ && !inserted { print row; inserted = 1 }
-		{ print }
+		BEGIN { last_idx = 0; line_count = 0 }
+		{
+			line_count++
+			lines[line_count] = $0
+			# Track the index of the last data row in the table.
+			if ($0 ~ /^\| [0-9]/) last_idx = line_count
+		}
+		END {
+			if (last_idx == 0) {
+				# No table rows yet — print everything then append row at end.
+				for (i = 1; i <= line_count; i++) print lines[i]
+				print row
+			} else {
+				for (i = 1; i <= last_idx; i++) print lines[i]
+				print row
+				for (i = last_idx + 1; i <= line_count; i++) print lines[i]
+			}
+		}
 	' "$INDEX" >"$INDEX.tmp" && mv "$INDEX.tmp" "$INDEX"
 
-	# Self-validate. The fresh stub will fail because the template body
-	# still has placeholder text mismatched against the H1 pattern; warn
-	# but do not fail — the author runs validate-migration after editing.
-	if ! bash "$VALIDATE" "$dest" >/dev/null 2>&1; then
-		echo "new-migration: scaffolded $dest" >&2
-		echo "new-migration: validator currently reports issues (expected for a fresh stub)." >&2
-		echo "new-migration: run 'bash $VALIDATE $dest' after editing." >&2
+	# Self-validate. The fresh stub now ALWAYS fails because the template
+	# carries an {__AGT_FILL__} sentinel that validate-migration.sh rejects
+	# — this is the H23 fix: the previous "validator says OK" path
+	# silently allowed authors to land migrations that were literally
+	# templates with {FROM}/{TO} substituted and nothing else.
+	if bash "$VALIDATE" "$dest" >/dev/null 2>&1; then
+		# Unexpected: validator passed on a fresh stub. Either someone
+		# stripped {__AGT_FILL__} from the template, or the validator's
+		# placeholder check was removed.
+		echo "new-migration: scaffolded $dest (WARNING: validator unexpectedly passed on the unfilled stub — check the template's {__AGT_FILL__} sentinel)" >&2
 	else
-		echo "new-migration: scaffolded $dest (validator: OK)" >&2
+		echo "new-migration: scaffolded $dest" >&2
+		echo "new-migration: remove the {__AGT_FILL__} sentinel and fill in the body; then run 'bash $VALIDATE $dest'" >&2
 	fi
 
 	printf '%s\n' "$dest"

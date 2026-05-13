@@ -6,7 +6,7 @@
 > `/agt-upgrade plan` and validated by structural diff against this
 > template). Optional sections may be omitted entirely.
 
-This migration converts a v{FROM}-style agentified target into a v{TO}-style installation. {One-paragraph context: what the new release adds/changes; whether it is BREAKING; who needs to apply it.}
+{__AGT_FILL__} This migration converts a v{FROM}-style agentified target into a v{TO}-style installation. {One-paragraph context: what the new release adds/changes; whether it is BREAKING; who needs to apply it. REMOVE the {__AGT_FILL__} token once you've written this paragraph — validate-migration.sh refuses any document that still contains it.}
 
 > **Audience.** Targets currently at v{FROM}. If you are starting fresh on v{TO}, skip this doc and follow [`README.md`](../README.md) "Install".
 
@@ -103,6 +103,6 @@ Common issues and remediation.
 - [`agentify-config.schema.json`](../agentify-config.schema.json) — config schema.
 - [`plugins/agentify/DEPRECATIONS.md`](../plugins/agentify/DEPRECATIONS.md) — append-only deprecation registry.
 - [`plugins/agentify/BREAKING_CHANGES.md`](../plugins/agentify/BREAKING_CHANGES.md) — append-only breaking-change tracker.
-- [`PATCH_LOG.md`](../PATCH_LOG.md) — per-version detailed changelog.
+- [`CHANGELOG.md`](../../../CHANGELOG.md) — keep-a-changelog format; per-release summaries.
 
 <!-- agentify-migration-template-version: 1 -->
