@@ -43,20 +43,43 @@ practice_track__sources_yaml() {
 	}
 	{
 		cat "$primary"
-		[ -f "$local_overlay" ] && { echo ""; cat "$local_overlay"; }
+		# B-6 companion: the previous `[ -f X ] && { ... }` form returned
+		# the test's exit code when the overlay was absent, which
+		# `set -euo pipefail` propagated as a function failure (so
+		# `practice_track list_sources` exited 1 even when the parse
+		# was clean). Branch explicitly so the missing-overlay path
+		# returns 0.
+		if [ -f "$local_overlay" ]; then
+			echo ""
+			cat "$local_overlay"
+		fi
 	}
 }
 
 practice_track__sources_json() {
 	# Convert the YAML to JSON via a focused awk parser. Supports only the
 	# limited schema in our sources.yaml (no nested objects, scalar lists).
+	#
+	# B-6 fix: the old parser had two patterns matching `^-id:` (the new-
+	# entry header AND a redundant closing rule). awk runs them in
+	# declaration order; the first pattern fires its `next`, so the
+	# closing rule never ran. Result: every entry except the last was
+	# left unclosed (`…tags…],{…` with no `}` between), producing
+	# malformed JSON that jq rejected. The whole ADR-0009 invariant #4
+	# practice-evolve loop was dead-on-arrival.
+	#
+	# Fix: track `entry_open` and emit the closing `}` from the new-entry
+	# header rule (before opening the next one). The END block emits the
+	# final close.
 	practice_track__sources_yaml | awk '
-		BEGIN { in_list = 0; first = 1; printf "{ \"sources\": [" }
+		BEGIN { in_list = 0; entry_open = 0; first = 1; printf "{ \"sources\": [" }
 		/^sources:[[:space:]]*$/ { in_list = 1; next }
 		in_list && /^[[:space:]]*-[[:space:]]*id:/ {
+			# Close the previous entry if one was open, then open this one.
+			if (entry_open) printf "}"
 			if (!first) printf ","
 			first = 0
-			# Start of a new entry.
+			entry_open = 1
 			printf "{"
 			val = $0; sub(/^[[:space:]]*-[[:space:]]*id:[[:space:]]*/, "", val)
 			gsub(/^[[:space:]]+|[[:space:]]+$/, "", val)
@@ -94,9 +117,8 @@ practice_track__sources_json() {
 			printf "]"
 			next
 		}
-		in_list && /^[[:space:]]*-[[:space:]]*id:/ { printf "}" }
 		END {
-			if (!first) printf "}"
+			if (entry_open) printf "}"
 			printf "]}"
 		}
 	' | jq -c '.'
