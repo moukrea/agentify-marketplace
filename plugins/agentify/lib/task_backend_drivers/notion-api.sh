@@ -45,17 +45,39 @@ notion__api() {
 }
 
 notion__md_to_blocks() {
-	# Best-effort: each non-empty line becomes a paragraph block.
+	# Each non-empty line becomes a Notion paragraph block.
+	#
+	# B-12 fix: the prior awk implementation only escaped `"` via
+	# `gsub(/"/, "\\\"")`. Backslashes in the source (e.g.
+	# `C:\Program Files`, regexes, code snippets) passed through
+	# literally, producing invalid JSON escapes (`\P`, `\C`). jq +
+	# notion API both rejected the result. Awk also had no facility
+	# for cross-line content — multi-line bodies were silently
+	# dropped to per-line blocks.
+	#
+	# Fix: read the whole file via jq's --rawfile (which handles every
+	# byte correctly), split on \n, and map each non-empty line to a
+	# paragraph block. jq's --rawfile + string-construction escape
+	# backslashes, quotes, control characters, and Unicode correctly.
 	local file="$1"
-	awk '
-		BEGIN { printf "[" }
-		NF {
-			gsub(/"/, "\\\"")
-			if (NR > 1) printf ","
-			printf "{\"object\":\"block\",\"type\":\"paragraph\",\"paragraph\":{\"rich_text\":[{\"type\":\"text\",\"text\":{\"content\":\"%s\"}}]}}", $0
-		}
-		END { print "]" }
-	' "$file"
+	jq -n --rawfile body "$file" '
+		($body | split("\n")) |
+		map(
+			select(. != "") |
+			{
+				object: "block",
+				type: "paragraph",
+				paragraph: {
+					rich_text: [
+						{
+							type: "text",
+							text: { content: . }
+						}
+					]
+				}
+			}
+		)
+	'
 }
 
 task_backend_charter_create() {
