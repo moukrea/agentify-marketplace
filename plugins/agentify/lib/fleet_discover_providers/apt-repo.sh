@@ -42,8 +42,8 @@ fleet_provider_run() {
 			select(. != "") |
 			{
 				url: .,
-				owner: (capture("https?://[^/]+/(?<o>[^/]+)/")?.o // ""),
-				name:  (capture("https?://[^/]+/[^/]+/(?<n>[^/]+)")?.n // ""),
+				owner: (capture("https?://[^/]+/(?<o>[^/]+)/").o // ""),
+				name:  (capture("https?://[^/]+/[^/]+/(?<n>[^/]+)").n // ""),
 				source_provider: "apt-repo",
 				first_seen_at: $now
 			}
