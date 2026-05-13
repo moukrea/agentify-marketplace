@@ -7,12 +7,16 @@
 # from stdout, stderr, and shell history.
 #
 # This provider exposes the secrets-layer contract over opaq:
-# - provider_resolve: not preferred (defeats opaq's no-plaintext-exposure
-#   guarantee). When called, the function fails loudly unless
-#   AGENTIFY_OPAQ_ALLOW_RESOLVE=1 is set explicitly, in which case it falls
-#   back to `opaq run -- printf '%s' '{{REF}}'` and captures the substituted
-#   output. The recommended path is provider_wrap, which delegates fully to
-#   `opaq run --`.
+# - provider_resolve: NOT SUPPORTED by design. opaq scrubs the plaintext
+#   secret from a child process's stdout *before* it reaches the parent
+#   shell, so `opaq run -- printf '%s' '{{REF}}'` returns asterisks/empty,
+#   not the actual secret. There is no way for this function to return the
+#   real value via opaq; calling it under any flag would silently produce
+#   wrong data, breaking downstream authenticated calls in a way that's
+#   indistinguishable from a wrong token. The function returns exit 64
+#   with a clear error rather than fake the contract.
+#   (An earlier AGENTIFY_OPAQ_ALLOW_RESOLVE override existed but never
+#   worked for this reason — it has been removed.)
 # - provider_wrap: prepends `opaq run -- ` to the command; opaq handles
 #   placeholder substitution and scrubbing.
 # - provider_list: `opaq search '' --json` (lists known names; values stay
@@ -39,18 +43,22 @@ provider_resolve() {
 		return 64
 	fi
 
-	if [ "${AGENTIFY_OPAQ_ALLOW_RESOLVE:-0}" != "1" ]; then
-		cat >&2 <<-MSG
-			opaq: refusing to resolve plaintext for $ref.
-			Prefer 'secrets wrap <cmd>' so values stay scrubbed.
-			Set AGENTIFY_OPAQ_ALLOW_RESOLVE=1 to override (not recommended).
-		MSG
-		return 1
-	fi
-
-	# Roundtrip through opaq run to substitute the placeholder; capture stdout.
-	# The subshell wrap is required so opaq's scrubbing doesn't blank our output.
-	AGENTIFY_OPAQ_ALLOW_RESOLVE=0 opaq run -- printf '%s' "{{${ref}}}"
+	# opaq scrubs the plaintext from a child's stdout BEFORE it reaches the
+	# parent shell. There is no way to return the real value via opaq —
+	# any text we'd capture from `opaq run -- printf '%s' '{{REF}}'` has
+	# already been redacted. Returning that string would silently produce
+	# wrong data, breaking downstream auth calls in a way indistinguishable
+	# from a stale token. We refuse with a clear error.
+	cat >&2 <<-MSG
+		opaq: provider_resolve is not supported by opaq's design.
+		opaq scrubs child-process stdout before the parent shell can read it,
+		so any value returned here would be asterisks rather than the real
+		secret. Use:
+		  - 'secrets wrap <cmd...>' (delegates to opaq run --) for opaq, or
+		  - AGENTIFY_SECRETS_PROVIDER=env (or another provider) if you need
+		    raw plaintext resolution for ${ref}.
+	MSG
+	return 64
 }
 
 provider_wrap() {
