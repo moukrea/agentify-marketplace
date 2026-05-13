@@ -209,9 +209,28 @@ task_backend_task_list() {
 		local status_name; status_name=$(jira__canonical_to_status "$state")
 		jql="${jql} AND status = \"${status_name}\""
 	fi
-	jq -n --arg jql "$jql" '{jql: $jql, fields: ["summary","status","labels"]}' \
-		| jira__api POST "search" -d @- \
-		| jq '[.issues[] | {id: .key, title: .fields.summary, state: .fields.status.name, labels: .fields.labels}]'
+	# H-14 fix: paginate through results. Jira's /search endpoint
+	# returns at most maxResults=50 by default (configurable up to 100);
+	# without pagination, plans with >50 tasks silently truncated.
+	local startAt=0 page_size=100 total=0 collected="[]"
+	while :; do
+		local resp
+		resp=$(jq -n --arg jql "$jql" --argjson sa "$startAt" --argjson ps "$page_size" \
+			'{jql: $jql, fields: ["summary","status","labels"], startAt: $sa, maxResults: $ps}' \
+			| jira__api POST "search" -d @-)
+		local issues_page
+		issues_page=$(echo "$resp" | jq -c '[.issues[] | {id: .key, title: .fields.summary, state: .fields.status.name, labels: .fields.labels}]')
+		collected=$(jq -cn --argjson a "$collected" --argjson b "$issues_page" '$a + $b')
+		total=$(echo "$resp" | jq -r '.total // 0')
+		startAt=$((startAt + page_size))
+		[ "$startAt" -ge "$total" ] && break
+		# Safety cap to prevent runaway pagination.
+		[ "$startAt" -ge 10000 ] && {
+			echo "jira-api task_list: capped pagination at startAt=10000 (total reported: $total); consider narrowing the query" >&2
+			break
+		}
+	done
+	echo "$collected"
 }
 
 task_backend_task_get() {
@@ -237,9 +256,24 @@ task_backend_task_update() {
 		jira__api POST "issue/${ref}/transitions" \
 			-d "$(jq -n --arg t "$tid" '{transition: {id: $t}}')" >/dev/null
 	else
-		# Fallback: add a label to record state externally.
+		# H-13 fix: the label-fallback path used to just `add` a new
+		# agentify-state:<state> label without removing prior ones.
+		# Over multiple transitions an issue accumulated stale labels
+		# (in_progress + blocked + in_review + done all at once). This
+		# was the exact pattern fixed for github-projects/gitlab-issues
+		# in C6 but never applied to jira-api. Fix: GET current labels,
+		# remove every agentify-state:* that isn't the new one in the
+		# SAME update payload.
+		local cur_labels remove_specs
+		cur_labels=$(jira__api GET "issue/${ref}?fields=labels" 2>/dev/null \
+			| jq -r '.fields.labels[]? | select(startswith("agentify-state:"))' \
+			| grep -vx "agentify-state:$state" || true)
+		# Build a JSON labels-update array combining remove ops for stale
+		# state-labels and add op for the new one.
+		remove_specs=$(printf '%s\n' "$cur_labels" | jq -R 'select(. != "") | {remove: .}' | jq -s .)
 		jira__api PUT "issue/${ref}" \
-			-d "$(jq -n --arg s "$state" '{update: {labels: [{add: ("agentify-state:" + $s)}]}}')" >/dev/null
+			-d "$(jq -n --arg s "$state" --argjson rem "$remove_specs" \
+				'{update: {labels: ($rem + [{add: ("agentify-state:" + $s)}])}}')" >/dev/null
 	fi
 	if [ -n "$comment" ]; then
 		local body; body=$(printf '%s' "$comment" | jq -Rs .)
@@ -259,7 +293,15 @@ task_backend_task_link() {
 task_backend_task_search() {
 	local query="${1:-}"
 	[ -z "$query" ] && { echo "jira-api task_search: missing query" >&2; return 64; }
-	jq -n --arg q "$query" '{jql: ("text ~ \"" + $q + "\""), fields: ["summary","status"]}' \
+	# H-12 fix: the prior implementation built JQL via string
+	# concatenation: `text ~ "<$q>"`. A query containing `"` escaped
+	# the JQL string and could pivot the query (`foo" OR project = "OPS`
+	# leaked data from project OPS). Fix: jq's @json filter encodes
+	# the value as a JSON string (quoted + escaped). JQL's string
+	# literal syntax is JSON-compatible (escape \" and \\), so the
+	# encoded form is a valid quoted JQL string.
+	jq -n --arg q "$query" \
+		'{jql: ("text ~ " + ($q | @json)), fields: ["summary","status"]}' \
 		| jira__api POST "search" -d @- \
 		| jq '[.issues[] | {id: .key, title: .fields.summary, state: .fields.status.name}]'
 }
