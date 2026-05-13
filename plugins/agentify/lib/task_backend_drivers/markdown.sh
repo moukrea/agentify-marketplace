@@ -45,8 +45,8 @@ markdown__path_root() {
 markdown__alloc_prd_id() {
 	local root index
 	root=$(markdown__path_root)
-	index="$root/prds/INDEX.json"
-	mkdir -p "$root/prds"
+	index="$root/$(markdown__prds_dir)/$(markdown__index_filename)"
+	mkdir -p "$root/$(markdown__prds_dir)"
 	# Use a lock file to avoid races between concurrent skill invocations.
 	local lock="$index.lock"
 	(
@@ -71,6 +71,24 @@ markdown__slug() {
 		| cut -c1-48
 }
 
+# B-10 fix: layout getters. The hardcoded strings 'prds', 'charter.md',
+# 'prd.md', 'plan.md', 'tasks.md', 'brainstorm.md', 'clarifications.md',
+# 'contracts', 'adrs', 'INDEX.json' are extracted into one-line functions
+# so file.sh can override them per task_backend.layout config without
+# duplicating every verb. The file driver previously implemented only
+# 2 of 15 verbs and silently inherited markdown's hardcoded paths,
+# making its layout config a lie for 13 verbs.
+markdown__prds_dir()              { printf '%s' 'prds'; }
+markdown__adrs_dir()              { printf '%s' 'adrs'; }
+markdown__charter_filename()      { printf '%s' 'charter.md'; }
+markdown__prd_filename()          { printf '%s' 'prd.md'; }
+markdown__plan_filename()         { printf '%s' 'plan.md'; }
+markdown__tasks_filename()        { printf '%s' 'tasks.md'; }
+markdown__brainstorm_filename()   { printf '%s' 'brainstorm.md'; }
+markdown__clarify_filename()      { printf '%s' 'clarifications.md'; }
+markdown__contracts_dirname()     { printf '%s' 'contracts'; }
+markdown__index_filename()        { printf '%s' 'INDEX.json'; }
+
 task_backend_charter_create() {
 	local body_file="${1:-}"
 	[ -z "$body_file" ] && {
@@ -84,8 +102,8 @@ task_backend_charter_create() {
 	local root
 	root=$(markdown__path_root)
 	mkdir -p "$root"
-	cp -- "$body_file" "$root/charter.md"
-	printf '%s\n' "$root/charter.md"
+	cp -- "$body_file" "$root/$(markdown__charter_filename)"
+	printf '%s\n' "$root/$(markdown__charter_filename)"
 }
 
 task_backend_charter_get() {
@@ -112,15 +130,15 @@ task_backend_prd_create() {
 	id=$(markdown__alloc_prd_id)
 	slug=$(markdown__slug "$title")
 	root=$(markdown__path_root)
-	dir="$root/prds/${id}-${slug}"
-	mkdir -p "$dir/contracts"
-	cp -- "$body_file" "$dir/prd.md"
+	dir="$root/$(markdown__prds_dir)/${id}-${slug}"
+	mkdir -p "$dir/$(markdown__contracts_dirname)"
+	cp -- "$body_file" "$dir/$(markdown__prd_filename)"
 	# Append to INDEX.json entries for later listing.
-	local index="$root/prds/INDEX.json"
+	local index="$root/$(markdown__prds_dir)/$(markdown__index_filename)"
 	jq --arg id "$id" --arg slug "$slug" --arg title "$title" --arg dir "$dir" \
 		'.entries += [{id: $id, slug: $slug, title: $title, dir: $dir, created_at: now | todateiso8601}]' \
 		"$index" >"$index.tmp" && mv "$index.tmp" "$index"
-	printf '%s\n' "$dir/prd.md"
+	printf '%s\n' "$dir/$(markdown__prd_filename)"
 }
 
 task_backend_prd_get() {
@@ -142,13 +160,13 @@ task_backend_brainstorm_create() {
 	# <path_root>/prds/brainstorms/<timestamp>.md.
 	local dest
 	if [ -n "$prd_ref" ]; then
-		dest="$(dirname -- "$prd_ref")/brainstorm.md"
+		dest="$(dirname -- "$prd_ref")/$(markdown__brainstorm_filename)"
 	else
 		local root ts
 		root=$(markdown__path_root)
 		ts=$(date -u +%Y%m%dT%H%M%SZ)
-		mkdir -p "$root/prds/brainstorms"
-		dest="$root/prds/brainstorms/${ts}.md"
+		mkdir -p "$root/$(markdown__prds_dir)/brainstorms"
+		dest="$root/$(markdown__prds_dir)/brainstorms/${ts}.md"
 	fi
 	cp -- "$body_file" "$dest"
 	printf '%s\n' "$dest"
@@ -168,7 +186,7 @@ task_backend_plan_create() {
 	}
 	local dir dest
 	dir="$(dirname -- "$prd_ref")"
-	dest="$dir/plan.md"
+	dest="$dir/$(markdown__plan_filename)"
 	cp -- "$body_file" "$dest"
 	printf '%s\n' "$dest"
 }
@@ -191,7 +209,7 @@ task_backend_task_create() {
 	}
 	local dir tasks_file slug ref
 	dir="$(dirname -- "$plan_ref")"
-	tasks_file="$dir/tasks.md"
+	tasks_file="$dir/$(markdown__tasks_filename)"
 	slug=$(markdown__slug "$title")
 	ref="$tasks_file#$slug"
 
@@ -221,7 +239,7 @@ task_backend_task_list() {
 	}
 	local dir tasks_file
 	dir="$(dirname -- "$plan_ref")"
-	tasks_file="$dir/tasks.md"
+	tasks_file="$dir/$(markdown__tasks_filename)"
 	if [ ! -f "$tasks_file" ]; then
 		printf '[]\n'
 		return 0
@@ -266,7 +284,7 @@ task_backend_task_get() {
 	local file id
 	file="${ref%%#*}"
 	id="${ref##*#}"
-	task_backend_task_list "$(dirname -- "$file")/plan.md" \
+	task_backend_task_list "$(dirname -- "$file")/$(markdown__plan_filename)" \
 		| jq --arg id "$id" '.[] | select(.id == $id)'
 }
 
@@ -316,11 +334,11 @@ task_backend_task_search() {
 	}
 	local root
 	root=$(markdown__path_root)
-	if [ ! -d "$root/prds" ]; then
+	if [ ! -d "$root/$(markdown__prds_dir)" ]; then
 		printf '[]\n'
 		return 0
 	fi
-	grep -rIli -- "$query" "$root/prds" 2>/dev/null \
+	grep -rIli -- "$query" "$root/$(markdown__prds_dir)" 2>/dev/null \
 		| jq -R . \
 		| jq -s . \
 		|| printf '[]\n'
@@ -345,7 +363,7 @@ task_backend_adr_create() {
 	else
 		local root
 		root=$(markdown__path_root)
-		adr_dir="$root/adrs"
+		adr_dir="$root/$(markdown__adrs_dir)"
 		mkdir -p "$adr_dir"
 	fi
 	# Find next NNNN.
@@ -386,7 +404,7 @@ task_backend_validate() {
 	local target="${1:-all}"
 	local root
 	root=$(markdown__path_root)
-	local prds_dir="$root/prds"
+	local prds_dir="$root/$(markdown__prds_dir)"
 	if [ ! -d "$prds_dir" ]; then
 		echo "task_backend validate: no PRDs directory at $prds_dir"
 		return 0
@@ -396,7 +414,7 @@ task_backend_validate() {
 	local prd_dirs=()
 	if [ "$target" = "all" ]; then
 		mapfile -t prd_dirs < <(find "$prds_dir" -mindepth 1 -maxdepth 1 -type d \
-			-not -name brainstorms -not -name contracts | sort)
+			-not -name brainstorms -not -name "$(markdown__contracts_dirname)" | sort)
 	else
 		# Resolve target: accept either a PRD dir, or a file inside one.
 		local resolved="$target"
@@ -407,8 +425,8 @@ task_backend_validate() {
 			echo "::error::task_backend validate: $target — not a PRD directory or file path"
 			return 1
 		fi
-		if [ ! -f "$resolved/tasks.md" ]; then
-			echo "::error::task_backend validate: $resolved/tasks.md not found (resolved from $target)"
+		if [ ! -f "$resolved/$(markdown__tasks_filename)" ]; then
+			echo "::error::task_backend validate: $resolved/$(markdown__tasks_filename) not found (resolved from $target)"
 			return 1
 		fi
 		prd_dirs=("$resolved")
@@ -416,7 +434,7 @@ task_backend_validate() {
 
 	local d
 	for d in "${prd_dirs[@]}"; do
-		local tasks="$d/tasks.md"
+		local tasks="$d/$(markdown__tasks_filename)"
 		[ -f "$tasks" ] || continue
 
 		# (1) Count H2 phases.
