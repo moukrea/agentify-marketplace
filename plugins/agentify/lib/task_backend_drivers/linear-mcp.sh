@@ -3,7 +3,7 @@
 # Same two-mode pattern as jira-mcp / notion-mcp: emit an MCP-call envelope
 # when interactive, fall back to linear-api.sh when headless.
 
-linear_mcp__interactive() { [ -t 0 ] || [ -n "${CLAUDE_CODE_SESSION:-}" ]; }
+linear_mcp__interactive() { [ -n "${CLAUDECODE:-}" ]; }
 linear_mcp__should_fallback() {
 	[ "${AGENTIFY_LINEAR_FORCE_API:-0}" = "1" ] && return 0
 	! linear_mcp__interactive

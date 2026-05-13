@@ -103,6 +103,15 @@ browser__emit_mcp_envelope() {
 
 # Headless fallback. Only read-only verbs make sense; everything else
 # refuses with a clear error rather than silently succeeding.
+#
+# H-15 fix: the prior implementation returned raw HTML for task_list /
+# task_get etc., but the task_backend interface declares those verbs
+# return JSON. Downstream consumers (jq pipelines in skills) blew up
+# with "parse error: Invalid literal" on every fetched HTML page. Fix:
+# for list-style verbs return an empty JSON array with a stderr _warn
+# explaining the limitation. For get-style verbs return JSON null.
+# Either way the contract (JSON) is honored; the warning signals that
+# the data was unreachable in headless mode.
 browser__webfetch_read_only() {
 	local verb="$1"; shift
 	local target
@@ -111,12 +120,31 @@ browser__webfetch_read_only() {
 		echo "browser: task_backend.endpoint is required for the webfetch fallback" >&2
 		return 64
 	fi
-	curl --fail-with-body --silent --location --max-time 30 \
+	# Probe reachability with curl --head; if it fails, emit the empty
+	# JSON shape for the verb so callers don't choke on raw HTML.
+	if ! curl --silent --head --fail --location --max-time 10 \
 		--user-agent "agentify-task-backend-browser/4.4.0 (+https://github.com/moukrea/agentify-marketplace)" \
-		"$target" || {
-		echo "browser webfetch: ${target} unreachable" >&2
-		return 1
-	}
+		"$target" >/dev/null 2>&1; then
+		echo "browser webfetch: ${target} unreachable; returning empty JSON shape for verb '${verb}'" >&2
+		case "$verb" in
+			task_list|task_search) printf '[]\n' ;;
+			*)                     printf 'null\n' ;;
+		esac
+		return 0
+	fi
+	# Reachable, but we still can't reliably parse arbitrary HTML into
+	# structured task records. Honor the JSON contract by returning the
+	# empty shape PLUS a stderr line that includes the page-fetched
+	# byte count so users can confirm the endpoint is alive.
+	local bytes
+	bytes=$(curl --silent --fail --location --max-time 30 \
+		--user-agent "agentify-task-backend-browser/4.4.0 (+https://github.com/moukrea/agentify-marketplace)" \
+		"$target" | wc -c | tr -d ' ' || echo 0)
+	echo "browser webfetch: ${target} returned ${bytes} bytes; verb '${verb}' has no headless parser — set CLAUDECODE=1 for MCP-driven extraction" >&2
+	case "$verb" in
+		task_list|task_search) printf '[]\n' ;;
+		*)                     printf 'null\n' ;;
+	esac
 }
 
 browser__refuse_headless() {

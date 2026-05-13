@@ -20,8 +20,8 @@
 # `AGENTIFY_JIRA_FORCE_API=1` forces fallback regardless of session.
 
 jira_mcp__detect_interactive() {
-	# Heuristic: stdin is a TTY OR CLAUDE_CODE_SESSION env var present.
-	[ -t 0 ] || [ -n "${CLAUDE_CODE_SESSION:-}" ]
+	# H-16 fix: standardize on CLAUDECODE env var (set by Claude Code in skill subprocesses). The prior `[ -t 0 ]` test fails in skill execution because stdin is typically a pipe; the CLAUDE_CODE_SESSION variable was never actually set by Claude Code.
+	[ -n "${CLAUDECODE:-}" ]
 }
 
 jira_mcp__should_fallback() {

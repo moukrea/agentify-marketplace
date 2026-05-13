@@ -4,7 +4,7 @@
 # emit an MCP-call envelope when interactive, fall back to notion-api.sh
 # when headless.
 
-notion_mcp__interactive() { [ -t 0 ] || [ -n "${CLAUDE_CODE_SESSION:-}" ]; }
+notion_mcp__interactive() { [ -n "${CLAUDECODE:-}" ]; }
 notion_mcp__should_fallback() {
 	[ "${AGENTIFY_NOTION_FORCE_API:-0}" = "1" ] && return 0
 	! notion_mcp__interactive
