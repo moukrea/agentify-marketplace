@@ -18,16 +18,23 @@ jobs:
     name: Lint (shell + JSON + schemas)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install shellcheck and shfmt
         run: |
           set -euxo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends shellcheck
-          curl -sSLo /usr/local/bin/shfmt \
-            https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_amd64
-          sudo chmod +x /usr/local/bin/shfmt
+          # H30 fix: pin shfmt by sha256. GitHub release assets are
+          # mutable; a tag-only pin lets a maintainer with mvdan/sh push
+          # access trojanize every CI run. The binary executes during
+          # the lint step, so verify before chmod +x.
+          SHFMT_URL='https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_amd64'
+          SHFMT_SHA256='1f57a384d59542f8fac5f503da1f3ea44242f46dff969569e80b524d64b71dbc'
+          curl -sSLo /tmp/shfmt "$SHFMT_URL"
+          printf '%s  /tmp/shfmt\n' "$SHFMT_SHA256" | sha256sum -c -
+          sudo install -m 0755 /tmp/shfmt /usr/local/bin/shfmt
+          rm -f /tmp/shfmt
 
       - name: shellcheck (error severity blocks; warning/info/style advisory)
         # Blocks the build only on `error`-severity findings. Lower-severity
@@ -69,7 +76,9 @@ jobs:
       - name: JSON-Schema validation (schemas themselves)
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet jsonschema
+          # H30 fix: pin pip dependencies to specific versions so a
+          # poisoned upstream release can't trojanize the lint runner.
+          python3 -m pip install --quiet 'jsonschema==4.23.0'
           for s in $(git ls-files '*-schema.json'); do
             python3 -c "import json,sys; json.load(open('$s'))" \
               && echo "$s parses ok" \
@@ -80,7 +89,7 @@ jobs:
     name: Manifest conformance
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install bats + jq
         run: |
@@ -95,7 +104,7 @@ jobs:
     name: Bats tests
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install bats + jq
         run: |
@@ -118,7 +127,7 @@ jobs:
     name: Smoke — bootstrap
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
       - run: |
           set -euxo pipefail
           sudo apt-get update -qq
@@ -129,7 +138,7 @@ jobs:
     name: Smoke — plugin install
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
       - run: |
           set -euxo pipefail
           sudo apt-get update -qq
@@ -140,7 +149,7 @@ jobs:
     name: Smoke — self-improve
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
       - run: |
           set -euxo pipefail
           sudo apt-get update -qq
@@ -151,7 +160,7 @@ jobs:
     name: Smoke — self-loop
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
       - run: |
           set -euxo pipefail
           sudo apt-get update -qq
@@ -162,7 +171,7 @@ jobs:
     name: Smoke — de-spec
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
       - run: |
           set -euxo pipefail
           sudo apt-get update -qq
@@ -174,7 +183,7 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ hashFiles('prds/**/tasks.md', 'documentation/agentic/prds/**/tasks.md') != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install jq
         run: |
@@ -192,7 +201,7 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-migration-needed') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
         with:
           fetch-depth: 0
 
