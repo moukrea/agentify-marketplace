@@ -23,20 +23,16 @@ file_mtime() {
   python3 -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))' "$1" 2>/dev/null || echo 0
 }
 
+# atomic_write_json is now a thin compatibility wrapper over
+# plugins/agentify/lib/_io.sh:atomic_write (same signature, same
+# atomicity guarantees, additionally restores umask on exit). Sourcing
+# _io.sh from here also pulls in _bash_version.sh, so every hook that
+# loads _lib.sh gets bash 4+ enforcement for free.
+# shellcheck source=../lib/_io.sh
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/_io.sh"
+
 atomic_write_json() {
-  local target="$1"; shift
-  local tmp
-  umask 077
-  # Portable mktemp template form (BSD/GNU): split dirname/basename so the suffix
-  # remains at the end of the basename — BSD mktemp rejects suffixes mid-path.
-  tmp="$(mktemp "${target%/*}/$(basename "$target").tmp.XXXXXX")"
-  if "$@" > "$tmp"; then
-    chmod 600 "$tmp"
-    mv "$tmp" "$target"
-  else
-    rm -f "$tmp"
-    return 1
-  fi
+  atomic_write "$@"
 }
 
 # Read additionalDirectories across all settings scopes + add-dirs.txt
