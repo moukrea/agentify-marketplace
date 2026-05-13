@@ -27,13 +27,33 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && p
 cd "$PLUGIN_ROOT"
 
 # Parse args. Extract --output= and pass everything else to the resolver.
+#
+# B-16 fix: the prior `for arg in "$@"` loop snapshotted the positional
+# args, so `shift` inside `--output) shift; output="$1"` did not advance
+# the iterator. With `agentify --output /tmp/out --foo=bar`, the path
+# `/tmp/out` was both consumed by the shift AND re-processed on the
+# next loop iteration (added to resolver_args), corrupting the
+# downstream resolver call. The author's note acknowledged the bug
+# explicitly but kept the buggy form "for clarity". Replace with a
+# proper `while [ "$#" -gt 0 ]` loop with explicit per-case shifts.
 output=""
 resolver_args=()
-for arg in "$@"; do
-  case "$arg" in
-    --output=*) output="${arg#--output=}" ;;
-    --output)   shift; output="$1" ;;  # NOTE: this loop won't see the shift, kept for clarity
-    *)          resolver_args+=("$arg") ;;
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output=*)
+      output="${1#--output=}"
+      shift
+      ;;
+    --output)
+      shift
+      [ "$#" -eq 0 ] && { echo "ERROR: --output requires a value" >&2; exit 2; }
+      output="$1"
+      shift
+      ;;
+    *)
+      resolver_args+=("$1")
+      shift
+      ;;
   esac
 done
 [ -z "$output" ] && { echo "ERROR: --output=<path> is required" >&2; exit 2; }
@@ -59,10 +79,17 @@ fleet_size="$(get '.fleet.size_engineers')"
 loop_path_root="$(get '.loop.path_root')"
 ticket_prefix="$(get '.ticket_system.prefix')"
 profile="$(get '.profile')"
-[ -z "$profile" ] && profile="standard"
+if [ -z "$profile" ]; then
+  echo "agentify: warning: .profile not set in config; using 'standard'" >&2
+  profile="standard"
+fi
+# B-17 fix: invalid --profile=<value> previously fell into the `*)` arm
+# and silently defaulted to standard. CI / scripts couldn't detect
+# typos. Now: exit 2 with a clear error so invalid profiles are caught
+# at the bootstrap step.
 case "$profile" in
   minimal|standard|full) ;;
-  *) echo "agentify: unknown profile '$profile' (need minimal|standard|full); defaulting to standard" >&2; profile="standard" ;;
+  *) echo "agentify: ERROR: unknown profile '$profile' (need minimal|standard|full)" >&2; exit 2 ;;
 esac
 
 # Derived placeholders.
