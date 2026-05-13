@@ -32,13 +32,29 @@ step=$(jq -r '.step // "?"' "$sentinel" 2>/dev/null || echo "?")
 at=$(jq -r '.at // empty' "$sentinel" 2>/dev/null || true)
 [ -z "$at" ] && at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-# Generate a UUID. /proc/sys/kernel/random/uuid on Linux, fallback to
-# /dev/urandom-based generation for macOS/BSD.
+# Generate a UUID. Try (in order):
+#   1. /proc/sys/kernel/random/uuid (Linux kernel-provided UUIDv4).
+#   2. uuidgen if installed (macOS / Linux distros ship it).
+#   3. od + sed fallback (NOT a true UUIDv4 — random bytes formatted to
+#      look like one; sufficient for filename uniqueness in this hook).
+# M-33 fix: previously the od/sed fallback produced an empty filename
+# on busybox/Alpine where `od -An` flag differs; two rollbacks in quick
+# succession overwrote the same draft. The new try-chain is robust
+# across Linux/macOS/BSD/busybox, and the final guard rejects an empty
+# uuid rather than producing `feedback-draft-.md`.
+uuid=""
 if [ -r /proc/sys/kernel/random/uuid ]; then
 	uuid=$(cat /proc/sys/kernel/random/uuid)
-else
-	uuid=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n' \
-		| sed 's/\(........\)\(....\)\(....\)\(....\)\(............\)/\1-\2-\3-\4-\5/')
+elif command -v uuidgen >/dev/null 2>&1; then
+	uuid=$(uuidgen | tr '[:upper:]' '[:lower:]')
+elif [ -r /dev/urandom ]; then
+	uuid=$(od -An -N16 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n' \
+		| sed 's/\(........\)\(....\)\(....\)\(....\)\(............\)/\1-\2-\3-\4-\5/' 2>/dev/null || true)
+fi
+if [ -z "$uuid" ]; then
+	# Last-resort fallback: timestamp + PID. Not collision-proof on a
+	# busy system but sufficient for forensic-only draft filenames.
+	uuid="ts-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 fi
 
 draft="${path_root}/feedback-draft-${uuid}.md"

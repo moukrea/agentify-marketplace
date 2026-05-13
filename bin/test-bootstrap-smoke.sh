@@ -34,7 +34,7 @@ SKILL="$REPO_ROOT/plugins/agentify/skills/agentify/SKILL.md"
 
 echo "=== bootstrap smoke: section 1 — /agentify SKILL.md sanity ==="
 if [ -f "$SKILL" ]; then pass "SKILL.md exists at $SKILL"; else ng "SKILL.md missing at $SKILL"; fi
-if head -1 "$SKILL" | grep -q '^---$'; then pass "frontmatter open fence"; else ng "frontmatter open fence missing on line 1"; fi
+if head -n 1 "$SKILL" | grep -q '^---$'; then pass "frontmatter open fence"; else ng "frontmatter open fence missing on line 1"; fi
 if grep -q '^description:' "$SKILL"; then pass "description field present"; else ng "description field missing"; fi
 if grep -q '^allowed-tools:' "$SKILL"; then pass "allowed-tools field present"; else ng "allowed-tools field missing"; fi
 # allowed-tools must be space-separated, not comma-separated.

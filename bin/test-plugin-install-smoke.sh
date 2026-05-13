@@ -107,7 +107,7 @@ if [ $? -eq 0 ] && [ -f "$TARGET/AGENTIFY.md" ]; then
   pass "plugins/agentify/bin/agentify rendered cleanly into $TARGET"
 else
   ng "plugins/agentify/bin/agentify failed:"
-  sed 's/^/    /' "$TMP/agentify.log" | head -10
+  sed 's/^/    /' "$TMP/agentify.log" | head -n 10
 fi
 
 # The rendered target should look like an installable agentify harness.

@@ -6,6 +6,9 @@
 #
 # Implements the secrets-provider contract: provider_resolve, provider_wrap,
 # provider_list, provider_check.
+#
+# C15: bash 4+ required (uses `${!ref-}` indirect parameter expansion).
+. "$(dirname "${BASH_SOURCE[0]}")/../_bash_version.sh"
 
 # Resolve a ref to its plaintext value (printed to stdout).
 provider_resolve() {

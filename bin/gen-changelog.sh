@@ -15,6 +15,12 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# C15: bash 4+ guard. This script uses `declare -A by_type` which is
+# bash-4-only; on macOS stock bash 3.2 the script aborts with a
+# confusing error. Source the central guard so the failure mode is a
+# clear message + EX_CONFIG exit instead.
+. "$REPO_ROOT/plugins/agentify/lib/_bash_version.sh"
+
 CHANGELOG="$REPO_ROOT/CHANGELOG.md"
 BREAKING="$REPO_ROOT/plugins/agentify/BREAKING_CHANGES.md"
 

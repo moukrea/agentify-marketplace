@@ -99,7 +99,7 @@ fi
 
 echo
 echo "=== de-spec smoke: assertion 6 — H1 title rendered for Acme ==="
-head1=$(head -1 "$OUT/AGENTIFY.md")
+head1=$(head -n 1 "$OUT/AGENTIFY.md")
 if echo "$head1" | grep -q '(v[0-9]'; then
   pass "AGENTIFY.md H1 carries version: $head1"
 else
