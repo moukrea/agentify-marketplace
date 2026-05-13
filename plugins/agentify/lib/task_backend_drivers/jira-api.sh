@@ -169,11 +169,46 @@ task_backend_task_create() {
 	}' | jira__api POST "issue" -d @- | jq -r '.key'
 }
 
+# B-13 fix: translate canonical agentify state names (in_progress) to
+# Jira workflow status names (In Progress) for JQL filtering AND
+# transition lookup. Without translation, `task_list <plan> in_progress`
+# built JQL `status = "in_progress"` which Jira matches against
+# workflow names — `In Progress`, not `in_progress`. Result: empty
+# array silently every time. task_update's transition lookup already
+# did this translation (gsub _ → space + case-insensitive); task_list
+# did not. Extract the translation into a helper used by both.
+#
+# Configurable override via task_backend.jira.status_map[<canonical>]
+# for tenants with non-standard workflow names (e.g. "Doing" instead
+# of "In Progress").
+jira__canonical_to_status() {
+	local canonical="$1" override
+	if [ -f ./agentify.config.json ]; then
+		override=$(jq -r --arg s "$canonical" \
+			'.task_backend.jira.status_map[$s] // empty' \
+			./agentify.config.json 2>/dev/null)
+		[ -n "$override" ] && { printf '%s' "$override"; return; }
+	fi
+	case "$canonical" in
+		draft)       printf 'Draft' ;;
+		ready)       printf 'Ready' ;;
+		in_progress) printf 'In Progress' ;;
+		blocked)     printf 'Blocked' ;;
+		in_review)   printf 'In Review' ;;
+		done)        printf 'Done' ;;
+		cancelled)   printf 'Cancelled' ;;
+		*)           printf '%s' "$canonical" ;;
+	esac
+}
+
 task_backend_task_list() {
 	local plan_ref="${1:-}" state="${2:-}"
 	[ -z "$plan_ref" ] && { echo "jira-api task_list: missing plan-ref" >&2; return 64; }
 	local jql="parent = ${plan_ref}"
-	[ -n "$state" ] && jql="${jql} AND status = \"${state}\""
+	if [ -n "$state" ]; then
+		local status_name; status_name=$(jira__canonical_to_status "$state")
+		jql="${jql} AND status = \"${status_name}\""
+	fi
 	jq -n --arg jql "$jql" '{jql: $jql, fields: ["summary","status","labels"]}' \
 		| jira__api POST "search" -d @- \
 		| jq '[.issues[] | {id: .key, title: .fields.summary, state: .fields.status.name, labels: .fields.labels}]'
@@ -190,11 +225,13 @@ task_backend_task_update() {
 	if ! printf '%s\n' "$AGT_TASK_STATES" | tr ' ' '\n' | grep -qx -- "$state"; then
 		echo "jira-api task_update: unknown state $state" >&2; return 64
 	fi
-	# Look up transitions and pick the one whose name matches the canonical
-	# state (case-insensitive); fall back to a label tag if no matching transition.
+	# Look up transitions by translated workflow name (B-13 helper); fall
+	# back to canonical-with-gsub for backward compatibility on tenants
+	# whose transition names happen to use underscore-style.
+	local status_name; status_name=$(jira__canonical_to_status "$state")
 	local tid
 	tid=$(jira__api GET "issue/${ref}/transitions" 2>/dev/null \
-		| jq -r --arg s "$state" '.transitions[] | select((.name | ascii_downcase) == ($s | ascii_downcase) or (.to.name | ascii_downcase) == ($s | ascii_downcase | gsub("_"; " "))) | .id' \
+		| jq -r --arg s "$status_name" --arg c "$state" '.transitions[] | select((.name | ascii_downcase) == ($s | ascii_downcase) or (.to.name | ascii_downcase) == ($s | ascii_downcase) or (.name | ascii_downcase) == ($c | ascii_downcase | gsub("_"; " "))) | .id' \
 		| head -1)
 	if [ -n "$tid" ]; then
 		jira__api POST "issue/${ref}/transitions" \
