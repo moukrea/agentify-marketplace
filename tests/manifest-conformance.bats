@@ -97,3 +97,86 @@ setup() {
 	run jq -e '.hooks | keys | length > 0' "$hooks_path"
 	[ "$status" -eq 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# C5 additions — close the coverage gaps the adversarial review surfaced:
+#   * reverse direction (every commands[].name -> existing skill dir)
+#   * commands[].name == basename(dirname(skill))
+#   * version parity across plugin.json and marketplace.json
+#   * every hooks.json command script resolves on disk
+#   * governance files have minimum content (not just non-empty)
+# ---------------------------------------------------------------------------
+
+@test "every command entry resolves to an existing skill directory" {
+	local missing=0
+	while IFS= read -r name; do
+		[ -d "$PLUGIN_ROOT/skills/$name" ] || {
+			echo "command '$name' has no matching skill directory at plugins/agentify/skills/$name"
+			missing=$((missing + 1))
+		}
+	done < <(jq -r '.commands[].name' "$PLUGIN_MANIFEST")
+	[ "$missing" -eq 0 ]
+}
+
+@test "every commands[].name matches its skill directory basename" {
+	local mismatched=0
+	while IFS= read -r row; do
+		local name skill expected
+		name="$(jq -r '.name' <<<"$row")"
+		skill="$(jq -r '.skill' <<<"$row")"
+		# skill: "./skills/<dir>/SKILL.md" -> basename(dirname()) == <dir>
+		expected="$(basename "$(dirname "${skill#./}")")"
+		if [ "$name" != "$expected" ]; then
+			echo "commands[].name=$name but skill resolves to dir=$expected"
+			mismatched=$((mismatched + 1))
+		fi
+	done < <(jq -c '.commands[]' "$PLUGIN_MANIFEST")
+	[ "$mismatched" -eq 0 ]
+}
+
+@test "plugin.json:.version == marketplace.json:.plugins[0].version" {
+	local plugin_ver marketplace_ver
+	plugin_ver=$(jq -r '.version' "$PLUGIN_MANIFEST")
+	marketplace_ver=$(jq -r '.plugins[0].version' "$MARKETPLACE_MANIFEST")
+	[ "$plugin_ver" = "$marketplace_ver" ]
+}
+
+@test "every hooks.json command path resolves on disk (when CLAUDE_PLUGIN_ROOT-rooted)" {
+	local hooks_path="$PLUGIN_ROOT/hooks/hooks.json"
+	local missing=0
+	while IFS= read -r cmd; do
+		# Only check ${CLAUDE_PLUGIN_ROOT}-rooted relative paths; absolute
+		# host paths, externally-installed CLIs, and bare expressions are
+		# the user's responsibility at runtime.
+		case "$cmd" in
+			'${CLAUDE_PLUGIN_ROOT}'/*)
+				local rel="${cmd#'${CLAUDE_PLUGIN_ROOT}'/}"
+				if [ ! -f "$PLUGIN_ROOT/$rel" ]; then
+					echo "hooks.json references missing file: $cmd"
+					missing=$((missing + 1))
+				fi
+				;;
+		esac
+	done < <(jq -r '..|.command? // empty' "$hooks_path")
+	[ "$missing" -eq 0 ]
+}
+
+@test "root LICENSE contains 'MIT License' header" {
+	grep -q "MIT License" "$REPO_ROOT/LICENSE"
+}
+
+@test "plugin LICENSE contains 'MIT License' header" {
+	grep -q "MIT License" "$PLUGIN_ROOT/LICENSE"
+}
+
+@test "SECURITY.md documents a private disclosure channel" {
+	# The doc must point at SOME private channel (advisory URL, email,
+	# or PGP key) rather than directing reporters to a public issue.
+	grep -qE 'security/advisories|security@|GPG|PGP|private' "$REPO_ROOT/SECURITY.md"
+}
+
+@test "CHANGELOG.md has [Unreleased] section and no XX-style date placeholders" {
+	grep -q '^## \[Unreleased\]' "$REPO_ROOT/CHANGELOG.md"
+	# Reject literal "XX" inside YYYY-MM-DD date placeholders.
+	! grep -E '\b20[0-9]{2}-[0-9]{2}-XX\b' "$REPO_ROOT/CHANGELOG.md"
+}

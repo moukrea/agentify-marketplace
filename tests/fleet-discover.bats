@@ -3,6 +3,24 @@
 
 bats_require_minimum_version 1.5.0
 
+load helpers
+
+# Wraps `jq -e <expr>` against $output and FAILS the test if the predicate
+# is false. The original file used bare `echo "$output" | jq -e '...'`
+# which only emits "false" on stdout; bats considered the test passed as
+# long as the last command (the jq pipeline itself) exited 0. With jq -e
+# pipes the exit code of `jq`, but the whole pipeline is still the last
+# *command* of the test only when it's the LAST line — every earlier
+# predicate was advisory at best.
+assert_output_jq() {
+	if printf '%s' "$output" | jq -e "$@" >/dev/null 2>&1; then
+		return 0
+	fi
+	echo "assert_output_jq failed: jq -e $* did not match against output:" >&2
+	printf '%s\n' "$output" >&2
+	return 1
+}
+
 setup() {
 	REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
 	LIB="$REPO_ROOT/plugins/agentify/lib/fleet_discover.sh"
@@ -22,8 +40,8 @@ teardown() {
 EOF
 	run --separate-stderr bash "$LIB"
 	[ "$status" -eq 0 ]
-	echo "$output" | jq -e '.schema_version == 2'
-	echo "$output" | jq -e '.peers == []'
+	assert_output_jq '.schema_version == 2'
+	assert_output_jq '.peers == []'
 }
 
 @test "file provider with object-form peers" {
@@ -43,9 +61,9 @@ EOF
 EOF
 	run --separate-stderr bash "$LIB"
 	[ "$status" -eq 0 ]
-	echo "$output" | jq -e '.peers | length == 2'
-	echo "$output" | jq -e '.fleet_name == "myfleet"'
-	echo "$output" | jq -e '.peers[] | .source_provider == "file"' >/dev/null
+	assert_output_jq '.peers | length == 2'
+	assert_output_jq '.fleet_name == "myfleet"'
+	assert_output_jq '.peers | all(.source_provider == "file")'
 }
 
 @test "file provider auto-expands bare owner/name strings" {
@@ -62,8 +80,8 @@ EOF
 	run --separate-stderr bash "$LIB"
 	[ "$status" -eq 0 ]
 	# unique_by(.url) sorts alphabetically; check by membership not position.
-	echo "$output" | jq -e '[.peers[] | .url] | sort == ["https://github.com/acme/bar", "https://github.com/acme/foo"]'
-	echo "$output" | jq -e '.peers | all(.owner == "acme")'
+	assert_output_jq '[.peers[].url] | sort == ["https://github.com/acme/bar", "https://github.com/acme/foo"]'
+	assert_output_jq '.peers | all(.owner == "acme")'
 }
 
 @test "multiple file providers union and deduplicate by url" {
@@ -81,8 +99,7 @@ EOF
 EOF
 	run --separate-stderr bash "$LIB"
 	[ "$status" -eq 0 ]
-	count=$(echo "$output" | jq '.peers | length')
-	[ "$count" = "3" ]
+	assert_output_jq '.peers | length == 3'
 }
 
 @test "missing file provider path emits empty (graceful degrade)" {
@@ -96,7 +113,7 @@ EOF
 EOF
 	run --separate-stderr bash "$LIB"
 	[ "$status" -eq 0 ]
-	echo "$output" | jq -e '.peers == []'
+	assert_output_jq '.peers == []'
 }
 
 @test "unknown provider type is skipped with warning on stderr" {
@@ -112,6 +129,6 @@ EOF
 	# (audit trail) while $output stays JSON-parseable.
 	run --separate-stderr bash "$LIB"
 	[ "$status" -eq 0 ]
-	echo "$output" | jq -e '.peers == []'
+	assert_output_jq '.peers == []'
 	[[ "$stderr" == *"unknown provider type does-not-exist"* ]]
 }

@@ -63,7 +63,9 @@ teardown() {
 	export AGT_TEST_TOKEN="t"
 	run bash "$SECRETS_LIB" list
 	[ "$status" -eq 0 ]
-	echo "$output" | jq -e 'type == "array"'
+	# Wrap jq -e in `run` so the test actually fails on a false predicate.
+	run jq -e 'type == "array"' <<<"$output"
+	[ "$status" -eq 0 ]
 }
 
 @test "unknown provider returns a clear error" {

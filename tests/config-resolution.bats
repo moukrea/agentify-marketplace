@@ -1,165 +1,107 @@
-#!/usr/bin/env bash
+#!/usr/bin/env bats
 # tests/config-resolution.bats — exercises lib/resolve_config.sh across the
-# four precedence cases of the WS-B-003 spec. Runnable as `bash` or under
-# `bats-core`. Uses a minimal @test polyfill so the same file works both
-# ways: bats-core processes the @test blocks natively; bash runs them as
-# functions via the run_all_tests harness at the bottom.
-#
-# Acceptance per epic/acceptance.json: bash tests/config-resolution.bats
+# four precedence cases of the WS-B-003 spec. Rewritten in C5 to use real
+# bats @test blocks (the earlier file used a `declare_test` helper that
+# bats-core does NOT recognise — `bats tests/*.bats --count` reported 0
+# tests in this file).
 
-set -uo pipefail
+bats_require_minimum_version 1.5.0
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LIB="$REPO_ROOT/plugins/agentify/lib/resolve_config.sh"
-TMPROOT="$(mktemp -d)"
-trap 'rm -rf "$TMPROOT"' EXIT
+load helpers
 
-# Polyfill: under plain bash, treat `@test "name" { body }` blocks as
-# function declarations and queue them for execution. Bats-core defines
-# its own @test handler and ignores this. We achieve compatibility by
-# implementing the test bodies as normal functions and listing them in
-# RUN_TEST_FUNCS at the bottom.
-
-pass=0
-fail=0
-RUN_TEST_FUNCS=()
-
-declare_test() {
-  local name="$1"; shift
-  RUN_TEST_FUNCS+=("$name")
+setup() {
+	setup_sandbox
+	LIB="$(repo_root)/plugins/agentify/lib/resolve_config.sh"
 }
 
-assert_eq() {
-  local actual="$1" expected="$2" msg="${3:-}"
-  if [ "$actual" = "$expected" ]; then
-    return 0
-  else
-    printf '    FAIL: %s\n      expected: [%s]\n      actual:   [%s]\n' \
-      "$msg" "$expected" "$actual" >&2
-    return 1
-  fi
+teardown() {
+	teardown_sandbox
 }
 
-source "$LIB"
-
-# Helper: run resolver with controlled env paths so the harness is
-# hermetic regardless of the cwd.
-run_resolver() {
-  local proj="$1"; shift
-  local plugin_default="$1"; shift
-  AGT_PROJECT_CONFIG="$proj" AGT_PLUGIN_DEFAULT="$plugin_default" \
-    bash "$LIB" "$@"
-}
-
-# Setup helpers.
 write_plugin_default() {
-  local path="$TMPROOT/plugin-default.json"
-  cat >"$path" <<'EOF'
+	local path="$SANDBOX/plugin-default.json"
+	cat >"$path" <<'EOF'
 {
   "company": {"name": "PluginDefaultCo"},
   "skills": {"prefix": "pdf"},
   "loop": {"path_root": ".agents-work"}
 }
 EOF
-  printf '%s' "$path"
+	printf '%s' "$path"
 }
 
 write_project_config() {
-  local path="$TMPROOT/project.json"
-  cat >"$path" <<'EOF'
+	local path="$SANDBOX/project.json"
+	cat >"$path" <<'EOF'
 {
   "company": {"name": "ProjectCo"},
   "skills": {"prefix": "prj"},
   "loop": {"path_root": ".scratch-state"}
 }
 EOF
-  printf '%s' "$path"
+	printf '%s' "$path"
 }
 
-# === Test 1: schema defaults only (no plugin default, no project config, no skill args) ===
-test_case_1_schema_defaults_only() {
-  local got
-  got="$(run_resolver /dev/null /dev/null)"
-  assert_eq "$(echo "$got" | jq -r '.company.name')"        "agentify project"   "company.name = schema default" || return 1
-  assert_eq "$(echo "$got" | jq -r '.skills.prefix')"       "agt"                "skills.prefix = schema default" || return 1
-  assert_eq "$(echo "$got" | jq -r '.loop.path_root')"      ".agents-work"       "loop.path_root = schema default" || return 1
-  assert_eq "$(echo "$got" | jq -r '.plugin.name')"         "agentify"           "plugin.name = schema default" || return 1
-  assert_eq "$(echo "$got" | jq -r '.fleet.size_engineers')" "null"              "fleet.size_engineers = null default" || return 1
-  return 0
+run_resolver() {
+	local proj="$1"; shift
+	local plugin_default="$1"; shift
+	AGT_PROJECT_CONFIG="$proj" AGT_PLUGIN_DEFAULT="$plugin_default" \
+		bash "$LIB" "$@"
 }
-declare_test test_case_1_schema_defaults_only
 
-# === Test 2: plugin install default present, no project config, no skill args ===
-test_case_2_plugin_default_overrides_schema() {
-  local pd="$(write_plugin_default)"
-  local got
-  got="$(run_resolver /dev/null "$pd")"
-  assert_eq "$(echo "$got" | jq -r '.company.name')"  "PluginDefaultCo" "company.name = plugin default" || return 1
-  assert_eq "$(echo "$got" | jq -r '.skills.prefix')" "pdf"             "skills.prefix = plugin default" || return 1
-  # Field NOT in plugin default falls through to schema default.
-  assert_eq "$(echo "$got" | jq -r '.plugin.name')"   "agentify"        "plugin.name = schema fallback" || return 1
-  return 0
+@test "config-resolution: schema defaults only (no plugin default, no project config, no skill args)" {
+	run run_resolver /dev/null /dev/null
+	assert_status 0
+	echo "$output" | assert_jq -e '.company.name == "agentify project"'
+	echo "$output" | assert_jq -e '.skills.prefix == "agt"'
+	echo "$output" | assert_jq -e '.loop.path_root == ".agents-work"'
+	echo "$output" | assert_jq -e '.plugin.name == "agentify"'
+	echo "$output" | assert_jq -e '.fleet.size_engineers == null'
 }
-declare_test test_case_2_plugin_default_overrides_schema
 
-# === Test 3: project config present, no skill args ===
-test_case_3_project_overrides_plugin_default() {
-  local pd="$(write_plugin_default)"
-  local proj="$(write_project_config)"
-  local got
-  got="$(run_resolver "$proj" "$pd")"
-  assert_eq "$(echo "$got" | jq -r '.company.name')"  "ProjectCo"      "company.name = project (over plugin default)" || return 1
-  assert_eq "$(echo "$got" | jq -r '.skills.prefix')" "prj"            "skills.prefix = project (over plugin default)" || return 1
-  assert_eq "$(echo "$got" | jq -r '.loop.path_root')" ".scratch-state" "loop.path_root = project (over plugin default)" || return 1
-  return 0
+@test "config-resolution: plugin install default overrides schema; missing field falls through" {
+	local pd
+	pd=$(write_plugin_default)
+	run run_resolver /dev/null "$pd"
+	assert_status 0
+	echo "$output" | assert_jq -e '.company.name == "PluginDefaultCo"'
+	echo "$output" | assert_jq -e '.skills.prefix == "pdf"'
+	echo "$output" | assert_jq -e '.plugin.name == "agentify"'   # schema fallback
 }
-declare_test test_case_3_project_overrides_plugin_default
 
-# === Test 4: skill args present (highest precedence) ===
-test_case_4_skill_args_override_all() {
-  local pd="$(write_plugin_default)"
-  local proj="$(write_project_config)"
-  local got
-  got="$(run_resolver "$proj" "$pd" --company.name=CliWinner --skills.prefix=cli)"
-  assert_eq "$(echo "$got" | jq -r '.company.name')"  "CliWinner"      "company.name = skill args (highest)" || return 1
-  assert_eq "$(echo "$got" | jq -r '.skills.prefix')" "cli"            "skills.prefix = skill args (highest)" || return 1
-  # Field NOT overridden by skill args falls through to project (then plugin then schema).
-  assert_eq "$(echo "$got" | jq -r '.loop.path_root')" ".scratch-state" "loop.path_root = project (skill args do not override)" || return 1
-  return 0
+@test "config-resolution: project config overrides plugin default" {
+	local pd proj
+	pd=$(write_plugin_default)
+	proj=$(write_project_config)
+	run run_resolver "$proj" "$pd"
+	assert_status 0
+	echo "$output" | assert_jq -e '.company.name == "ProjectCo"'
+	echo "$output" | assert_jq -e '.skills.prefix == "prj"'
+	echo "$output" | assert_jq -e '.loop.path_root == ".scratch-state"'
 }
-declare_test test_case_4_skill_args_override_all
 
-# === Bonus: dotted-path nested args produce nested JSON (not "skills.prefix": "x") ===
-test_case_5_dotted_args_become_nested_json() {
-  local got
-  got="$(run_resolver /dev/null /dev/null --marketplace.name=upstream --plugin.namespace=ns)"
-  assert_eq "$(echo "$got" | jq -r '.marketplace.name')"  "upstream" "marketplace.name nested via dotted path" || return 1
-  assert_eq "$(echo "$got" | jq -r '.plugin.namespace')"  "ns"       "plugin.namespace nested via dotted path" || return 1
-  return 0
+@test "config-resolution: skill args override everything; missing args fall through" {
+	local pd proj
+	pd=$(write_plugin_default)
+	proj=$(write_project_config)
+	run run_resolver "$proj" "$pd" --company.name=CliWinner --skills.prefix=cli
+	assert_status 0
+	echo "$output" | assert_jq -e '.company.name == "CliWinner"'
+	echo "$output" | assert_jq -e '.skills.prefix == "cli"'
+	# Field NOT overridden by skill args -> project (then plugin then schema).
+	echo "$output" | assert_jq -e '.loop.path_root == ".scratch-state"'
 }
-declare_test test_case_5_dotted_args_become_nested_json
 
-# === Bonus: typed values (null, true, false, integers) preserved ===
-test_case_6_typed_values_preserved() {
-  local got
-  got="$(run_resolver /dev/null /dev/null --fleet.size_engineers=50)"
-  assert_eq "$(echo "$got" | jq -r '.fleet.size_engineers | type')" "number" "size_engineers parsed as number" || return 1
-  assert_eq "$(echo "$got" | jq -r '.fleet.size_engineers')"        "50"     "size_engineers = 50" || return 1
-  return 0
+@test "config-resolution: dotted-path nested args produce nested JSON" {
+	run run_resolver /dev/null /dev/null --marketplace.name=upstream --plugin.namespace=ns
+	assert_status 0
+	echo "$output" | assert_jq -e '.marketplace.name == "upstream"'
+	echo "$output" | assert_jq -e '.plugin.namespace == "ns"'
 }
-declare_test test_case_6_typed_values_preserved
 
-# === Test runner (works under plain bash; bats-core has its own driver) ===
-echo "=== config-resolution.bats: running ${#RUN_TEST_FUNCS[@]} tests ==="
-for fn in "${RUN_TEST_FUNCS[@]}"; do
-  printf '  %s ... ' "$fn"
-  if "$fn"; then
-    printf 'PASS\n'
-    pass=$((pass+1))
-  else
-    printf 'FAIL\n'
-    fail=$((fail+1))
-  fi
-done
-echo "=== config-resolution.bats: $pass passed, $fail failed ==="
-[ "$fail" -eq 0 ]
+@test "config-resolution: typed values (integers) preserved as numbers" {
+	run run_resolver /dev/null /dev/null --fleet.size_engineers=50
+	assert_status 0
+	echo "$output" | assert_jq -e '.fleet.size_engineers | type == "number"'
+	echo "$output" | assert_jq -e '.fleet.size_engineers == 50'
+}
