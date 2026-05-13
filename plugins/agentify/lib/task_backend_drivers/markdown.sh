@@ -366,17 +366,31 @@ task_backend_adr_create() {
 }
 
 task_backend_validate() {
-	# Markdown-backend conformance: walk every PRD dir, assert tasks.md
-	# (when present) satisfies ≤5 H2 phases × ≤7 tasks/phase, every task
-	# has **Validation:**, every phase ends with ## Checkpoint.
+	# Markdown-backend conformance gate. Each <prds-root>/<prd>/tasks.md must
+	# satisfy ALL of:
+	#   * ≤5 H2 phases (^## Phase )
+	#   * ≤7 tasks per phase (^- Task: bullets between two H2 Phase headings)
+	#   * exactly one `**Validation:**` line per task, AND
+	#   * each Validation content ≥10 chars and does not match the
+	#     case-insensitive vague-phrase blacklist (looks good|tbd|nice|ok)
+	#     — these were the agt-prd documented blacklist; the v1 broader set
+	#     (clean|clear|works) over-matched (e.g. clarify) and is dropped.
+	#   * one `## Checkpoint N` per phase, numbered to match.
+	#
+	# All violations report on stdout as ::error::; per-phase >7-tasks and
+	# missing-Checkpoint conditions also increment the failure counter, so
+	# CI fails fast. The legacy `pipe-into-while` failure-count bug
+	# (subshell increments lost) is gone — counts come out of awk directly
+	# via its exit code, and the per-phase report uses process substitution
+	# so the outer counter is unaffected by subshell scoping.
 	local target="${1:-all}"
 	local root
 	root=$(markdown__path_root)
 	local prds_dir="$root/prds"
-	[ ! -d "$prds_dir" ] && {
+	if [ ! -d "$prds_dir" ]; then
 		echo "task_backend validate: no PRDs directory at $prds_dir"
 		return 0
-	}
+	fi
 
 	local failures=0
 	local prd_dirs=()
@@ -384,44 +398,98 @@ task_backend_validate() {
 		mapfile -t prd_dirs < <(find "$prds_dir" -mindepth 1 -maxdepth 1 -type d \
 			-not -name brainstorms -not -name contracts | sort)
 	else
-		# Treat target as a prd-ref (file path); pass its dir.
-		prd_dirs=("$(dirname -- "$target")")
+		# Resolve target: accept either a PRD dir, or a file inside one.
+		local resolved="$target"
+		if [ -f "$resolved" ]; then
+			resolved="$(dirname -- "$resolved")"
+		fi
+		if [ ! -d "$resolved" ]; then
+			echo "::error::task_backend validate: $target — not a PRD directory or file path"
+			return 1
+		fi
+		if [ ! -f "$resolved/tasks.md" ]; then
+			echo "::error::task_backend validate: $resolved/tasks.md not found (resolved from $target)"
+			return 1
+		fi
+		prd_dirs=("$resolved")
 	fi
 
 	local d
 	for d in "${prd_dirs[@]}"; do
 		local tasks="$d/tasks.md"
 		[ -f "$tasks" ] || continue
-		# Count H2 phases.
+
+		# (1) Count H2 phases.
 		local phases
 		phases=$(grep -cE '^## Phase ' "$tasks" || true)
 		if [ "$phases" -gt 5 ]; then
-			echo "::error::$tasks: more than 5 phases ($phases)"
+			echo "::error::$tasks: more than 5 phases ($phases > 5)"
 			failures=$((failures + 1))
 		fi
-		# Per-phase task count (- Task: bullets between H2 phases).
-		# Reuse awk to count tasks per phase.
-		awk '
-			/^## Phase / { if (phase != "" && count > 7) print phase ": " count " tasks (>7)"; phase = $0; count = 0; next }
+
+		# (2) Per-phase task count. Use process substitution so the outer
+		# `failures` counter persists; awk emits one line per offending phase.
+		local _violation
+		while IFS= read -r _violation; do
+			[ -n "$_violation" ] || continue
+			echo "::error::$tasks: $_violation"
+			failures=$((failures + 1))
+		done < <(awk '
+			BEGIN { phase=""; count=0 }
+			/^## Phase / {
+				if (phase != "" && count > 7) print phase ": " count " tasks (>7)"
+				phase = $0; count = 0; next
+			}
 			/^- Task: / { count++ }
-			END { if (count > 7) print phase ": " count " tasks (>7)" }
-		' "$tasks" | while read -r line; do
-			[ -n "$line" ] && { echo "::error::$tasks: $line"; failures=$((failures + 1)); }
-		done
-		# Every task has **Validation:**.
+			END {
+				if (phase != "" && count > 7) print phase ": " count " tasks (>7)"
+			}
+		' "$tasks")
+
+		# (3) Validation: count + content.
 		local tasks_total
 		tasks_total=$(grep -cE '^- Task: ' "$tasks" || true)
 		local val_total
-		val_total=$(grep -cE '^\s+- \*\*Validation:\*\* ' "$tasks" || true)
+		val_total=$(grep -cE '^[[:space:]]+- \*\*Validation:\*\* ' "$tasks" || true)
 		if [ "$tasks_total" -ne "$val_total" ]; then
-			echo "::error::$tasks: $tasks_total tasks but only $val_total **Validation:** lines"
+			echo "::error::$tasks: $tasks_total tasks but $val_total **Validation:** lines"
 			failures=$((failures + 1))
 		fi
-		# Every phase ends with a Checkpoint (## Checkpoint N).
+
+		# (3b) Validation content check. Walks every Validation: line; rejects
+		# lines whose content (after the colon+space) is <10 chars or matches
+		# the vague-phrase blacklist with word boundaries.
+		while IFS= read -r _violation; do
+			[ -n "$_violation" ] || continue
+			echo "::error::$tasks: $_violation"
+			failures=$((failures + 1))
+		done < <(awk '
+			BEGIN { IGNORECASE = 1 }
+			/^[[:space:]]+- \*\*Validation:\*\*[[:space:]]+/ {
+				# Strip the prefix.
+				s = $0
+				sub(/^[[:space:]]+- \*\*Validation:\*\*[[:space:]]+/, "", s)
+				# Strip trailing whitespace.
+				sub(/[[:space:]]+$/, "", s)
+				if (length(s) < 10) {
+					print "Validation content too short (<10 chars): " $0
+					next
+				}
+				if (s ~ /(^|[^[:alnum:]])(looks good|tbd|nice|ok)([^[:alnum:]]|$)/) {
+					print "Validation content matches vague-phrase blacklist: " s
+				}
+			}
+		' "$tasks")
+
+		# (4) Checkpoint count must equal phase count. This is a hard rule per
+		# ADR 0007 (was a ::warning:: in the original PR; promoted to ::error::
+		# because lifecycle-conformance is supposed to enforce structure, not
+		# advise on it).
 		local cp_count
 		cp_count=$(grep -cE '^## Checkpoint ' "$tasks" || true)
-		if [ "$cp_count" -lt "$phases" ]; then
-			echo "::warning::$tasks: $phases phases but only $cp_count checkpoints"
+		if [ "$cp_count" -ne "$phases" ]; then
+			echo "::error::$tasks: $phases phases but $cp_count checkpoints (must match 1:1)"
+			failures=$((failures + 1))
 		fi
 	done
 
