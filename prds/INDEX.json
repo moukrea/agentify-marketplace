@@ -1,5 +1,5 @@
 {
-  "next_id": 4,
+  "next_id": 5,
   "entries": [
     {
       "id": "0001",
@@ -21,6 +21,13 @@
       "title": "Skill enforcement gates — structural enforcement of substantive research, lifecycle interaction, and branch discipline",
       "dir": "./prds/0003-skill-enforcement-gates-structural-enforcement-o",
       "created_at": "2026-05-14T14:36:31Z"
+    },
+    {
+      "id": "0004",
+      "slug": "v6-0-plan-mode-integration-discovery-accumulatio",
+      "title": "v6.0 — plan-mode integration + discovery accumulation + Claude Code evolution surfacing",
+      "dir": "./prds/0004-v6-0-plan-mode-integration-discovery-accumulatio",
+      "created_at": "2026-05-14T19:16:04Z"
     }
   ]
 }
