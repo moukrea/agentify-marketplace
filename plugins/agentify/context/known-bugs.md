@@ -138,3 +138,33 @@
 **Last verified:** 2026-04-27
 **Link:** https://code.claude.com/docs/en/permissions (anchor: additional-directories-grant-file-access-not-configuration)
 **Summary:** `--add-dir` grants read/write file access. It does NOT load: subagents, commands (legacy), output styles, or CLAUDE.md (gated by `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1`). It DOES load: skills under `.claude/skills/` in added dirs. Project `.claude/agents/` is not discovered via `--add-dir` — share via `~/.claude/agents/` or a plugin instead.
+
+---
+
+## #20397 — PostToolUse ExitPlanMode hook does not fire when user clears context {#issue-20397}
+
+**Status:** Open (per upstream issue tracker, May 2026)
+**Last verified:** 2026-05-14
+**Link:** https://github.com/anthropics/claude-code/issues/20397
+**Summary:** The `PostToolUse` hook configured against `matcher: "ExitPlanMode"` fires correctly when the user APPROVES the plan and proceeds in the same session. It SILENTLY does NOT fire when the user approves the plan AND then clears the context (`/clear` or starts a new conversation from the plan-approval prompt). Result: any persistence logic depending on the hook misses the clear-context path; the plan body is lost from the harness's perspective.
+**Workaround / mitigation:** Do not depend on the `ExitPlanMode` PostToolUse hook for primary persistence. The agentify harness (PRD 0004, v6.0) uses plan-mode for the approval UX but persists via `task_backend <verb>_create` from the post-approval model context — the harness owns the persist path. The existing `plugins/agentify/hooks/capture-plan.sh` stays as a best-effort backup writing to `plansDirectory`.
+
+---
+
+## #21282 — Plan-mode transitions invisible to hooks (feature request) {#issue-21282}
+
+**Status:** Open feature request
+**Last verified:** 2026-05-14
+**Link:** https://github.com/anthropics/claude-code/issues/21282
+**Summary:** Plan-mode entry and exit transitions are partially invisible to the hooks system. `PreToolUse`/`PostToolUse` hooks do NOT fire reliably for `EnterPlanMode` or `ExitPlanMode` across all session shapes — only regular tools like `Bash`, `Write`, `Read` trigger them. `Stop` hook fires but with `query: undefined`, giving no way to distinguish plan-mode exit from other stop events. The debug log shows no plan-mode events. The feature request proposes either making plan-mode tools fire standard hooks reliably, OR adding dedicated `PlanModeEnter` / `PlanModeExit` hook events.
+**Workaround / mitigation:** v6.0 of the agentify harness routes plan-mode integration through SKILL.md prose + transcript-parse in `session_interaction_check.sh` (looks for `ExitPlanMode` tool-call events in the active transcript). When the upstream issue resolves, the harness can migrate to dedicated hook events.
+
+---
+
+## #22343 — ExitPlanMode hook cwd is `~` instead of project directory {#issue-22343}
+
+**Status:** Open (per upstream issue tracker, 2026)
+**Last verified:** 2026-05-14
+**Link:** https://github.com/anthropics/claude-code/issues/22343
+**Summary:** When a `PostToolUse` hook fires on `ExitPlanMode`, the working directory of the hook subprocess resolves to the user's home directory (`~`) rather than the project directory. Relative paths in the hook configuration (e.g., `./.claude/plans`) therefore resolve to `~/.claude/plans` rather than the intended project-relative location. Discovered during plan-review plugin testing across multiple projects.
+**Workaround / mitigation:** Hook scripts must use the `$CLAUDE_PROJECT_DIR` env var (which IS reliably passed) to construct absolute paths. The agentify harness `capture-plan.sh` already uses this pattern. PRD 0004's design routes persistence through the harness path which doesn't rely on hook cwd at all, so the issue is observability-only for the agentify use case.
