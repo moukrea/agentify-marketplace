@@ -163,8 +163,7 @@ echo "$raw" | jq -c --arg upstream "$upstream" '
 ' | jq -c '
   map(. + {
     feedback_issue_id:
-      (.body
-        | capture("agentify-feedback-id: (?<id>[a-f0-9-]+)")?.id
+      ((.body | capture("agentify-feedback-id: (?<id>[a-f0-9-]+)")? // {}).id
         // null),
     severity:
       (if   (.body | test("(?m)^- \\[x\\] critical")) then "critical"
