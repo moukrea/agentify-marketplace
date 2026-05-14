@@ -36,11 +36,26 @@ Uses `plugins/agentify/templates/lifecycle/prd.md.template`:
   — a check a human or CI can actually run. "Looks good" is not a
   criterion.
 
-## Preflight (mandatory, hard refusal — PRD 0003 FR-6)
+## Plan-mode entry (mandatory — PRD 0004 v6.0 FR-1)
+
+**Skill entry MUST invoke `EnterPlanMode`** before drafting begins. The native plan-mode provides read-only enforcement during drafting (no accidental file edits while planning) AND the canonical Claude Code plan-approval UI. This is the v6.0 default for the three design phases (`/agt-prd`, `/agt-plan`, `/agt-tasks`).
+
+Flow:
+
+1. `EnterPlanMode` — drafting begins. The model reads context, formulates the PRD body per the [Output structure](#output-structure) template. No edits during this phase.
+2. `ExitPlanMode` with the PRD body — the native UI surfaces the draft for approval/reject.
+3. On approval, plan-mode exits and the model is back in normal mode.
+4. The model writes the approved body to a temp file, computes its sha256, then invokes the preflight (next section).
+5. The preflight detects the `ExitPlanMode` transcript event naturally — no `--user-reviewed=<sha>` flag is required in the plan-mode path. The flag remains as a fallback for headless callers that genuinely cannot use plan-mode (see migration `v5.0.0-to-v6.0.0.md`).
+
+Caveat: per upstream issues #20397 / #21282 / #22343 documented in `plugins/agentify/context/known-bugs.md`, the `ExitPlanMode` PostToolUse hook is unreliable. The harness OWNS persistence (via `task_backend` from the post-approval model context); the hook is best-effort backup only.
+
+## Preflight (mandatory, hard refusal — PRD 0003 FR-6, extended in PRD 0004 FR-6)
 
 Before `task_backend prd_create`, the skill MUST prove user interaction
-over the draft body. Two paths satisfy the gate, EITHER is sufficient:
+over the draft body. Three paths satisfy the gate, ANY is sufficient:
 
+0. **Plan-mode path (v6.0 default)** — `ExitPlanMode` tool call appears in the active transcript after the draft mtime. This is the natural path when plan-mode is used (per the section above).
 1. **Structured choice path** — invoke `AskUserQuestion` (or its equivalent
    in the harness) to surface the draft and collect approval, THEN compute
    `draft_sha=$(sha256sum <body-file> | cut -d' ' -f1)` and pass it as

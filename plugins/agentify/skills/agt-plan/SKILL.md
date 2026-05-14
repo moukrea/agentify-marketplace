@@ -35,10 +35,14 @@ Uses `plugins/agentify/templates/lifecycle/plan.md.template`:
 - **Verification plan**: test commands + observable signals — the
   exact list `/<prefix>-implement` will follow.
 
-## Preflight (mandatory, hard refusal — PRD 0003 FR-6)
+## Plan-mode entry (mandatory — PRD 0004 v6.0 FR-1)
 
-Same contract as `/agt-prd` (see that skill's Preflight section for the two
-interaction paths). Invocation:
+**Skill entry MUST invoke `EnterPlanMode`** before drafting the plan body. See `/agt-prd`'s Plan-mode entry section for the full flow + rationale. The plan-shaped artifact this skill produces is a natural fit for Claude Code's native plan-mode UI. After approval via `ExitPlanMode`, the model writes the body and proceeds through the Preflight section below; the `ExitPlanMode` transcript event satisfies FR-6 without needing the `--user-reviewed=<sha>` flag.
+
+## Preflight (mandatory, hard refusal — PRD 0003 FR-6, extended in PRD 0004 FR-6)
+
+Same contract as `/agt-prd` (see that skill's Preflight section for all three
+interaction paths — plan-mode, AskUserQuestion, sha-flag). Invocation:
 
 ```bash
 bash plugins/agentify/lib/agt_plan_preflight.sh "$body_file" --user-reviewed="$draft_sha" \

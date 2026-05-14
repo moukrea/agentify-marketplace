@@ -41,10 +41,14 @@ Calls `task_backend task_create <plan-ref> <title> <body> <validation>`
 once per task. The markdown driver appends bullets to `tasks.md`; other
 drivers create Sub-task issues / checklist items.
 
-## Preflight (mandatory, hard refusal — PRD 0003 FR-6)
+## Plan-mode entry (mandatory — PRD 0004 v6.0 FR-1)
 
-Same contract as `/agt-prd` (see that skill's Preflight section for the two
-interaction paths). The tasks artifact is `<prd-dir>/tasks.md`. Invocation
+**Skill entry MUST invoke `EnterPlanMode`** before drafting the tasks artifact. See `/agt-prd`'s Plan-mode entry section for the full flow + rationale. Even though tasks.md is bullet-list-shaped (rather than prose-plan-shaped), it carries the same falsifiable-validation discipline as the PRD/plan phases and benefits from native plan-mode's read-only enforcement during drafting. After approval via `ExitPlanMode`, the model writes tasks.md and proceeds through the Preflight section below.
+
+## Preflight (mandatory, hard refusal — PRD 0003 FR-6, extended in PRD 0004 FR-6)
+
+Same contract as `/agt-prd` (see that skill's Preflight section for all three
+interaction paths — plan-mode, AskUserQuestion, sha-flag). The tasks artifact is `<prd-dir>/tasks.md`. Invocation
 gates each persist of the full tasks.md (not each individual task_create call):
 
 ```bash
