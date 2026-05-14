@@ -1,19 +1,21 @@
 {
-  "generated_at": "2026-05-14T13:28:13Z",
-  "total": 7,
+  "generated_at": "2026-05-14T20:38:07Z",
+  "total": 14,
   "by_severity": {
     "critical": 1,
-    "info": 3,
-    "major": 1,
-    "moderate": 2
+    "info": 4,
+    "major": 2,
+    "moderate": 7
   },
   "by_category": {
     "bug": 1,
-    "ci-broken": 1,
+    "ci-broken": 2,
+    "doc-gap": 1,
     "feedback-recurring": 1,
     "manifest-drift": 1,
-    "meta": 3
+    "meta": 4,
+    "practice-drift": 4
   },
   "recurring": [],
-  "open_synthetic_findings": 7
+  "open_synthetic_findings": 14
 }
