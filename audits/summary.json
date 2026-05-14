@@ -1,12 +1,19 @@
 {
-  "generated_at": "2026-05-13T21:05:51Z",
-  "total": 2,
+  "generated_at": "2026-05-14T13:28:13Z",
+  "total": 7,
   "by_severity": {
-    "info": 2
+    "critical": 1,
+    "info": 3,
+    "major": 1,
+    "moderate": 2
   },
   "by_category": {
-    "meta": 2
+    "bug": 1,
+    "ci-broken": 1,
+    "feedback-recurring": 1,
+    "manifest-drift": 1,
+    "meta": 3
   },
   "recurring": [],
-  "open_synthetic_findings": 2
+  "open_synthetic_findings": 7
 }

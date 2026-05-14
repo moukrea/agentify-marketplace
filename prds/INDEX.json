@@ -1,5 +1,5 @@
 {
-  "next_id": 2,
+  "next_id": 3,
   "entries": [
     {
       "id": "0001",
@@ -7,6 +7,13 @@
       "title": "Three-tier architecture with pluggable abstractions and self-improving practice loop",
       "dir": "./prds/0001-three-tier-architecture",
       "created_at": "2026-05-12T00:00:00Z"
+    },
+    {
+      "id": "0002",
+      "slug": "audit-20260514-fix-pass-restore-ci-green-close-5",
+      "title": "Audit 20260514 fix pass — restore CI green + close 5 findings",
+      "dir": "./prds/0002-audit-20260514-fix-pass-restore-ci-green-close-5",
+      "created_at": "2026-05-14T13:40:06Z"
     }
   ]
 }

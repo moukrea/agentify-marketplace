@@ -9,3 +9,9 @@ plugins/agentify/practices/raw/
 # Bootstrap/render output (`bin/agentify --output=<path>`) — never the
 # working tree itself.
 .agentify-test-output/
+
+# /agt-loop in-session state (plans, reviews, revisions per task).
+.agents-work/
+
+# task_backend file-driver lock files (atomicity helper; never tracked).
+prds/INDEX.json.lock
