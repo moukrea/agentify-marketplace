@@ -1,5 +1,56 @@
 {
   "$schema": "./pinned-practices.schema.json",
-  "pinned_at": "2026-05-12T00:00:00Z",
-  "sources": {}
+  "pinned_at": "2026-05-14T13:55:00Z",
+  "sources": {
+    "anthropic-engineering": {
+      "last_checked_at": "1970-01-01T00:00:00Z",
+      "distillations": [],
+      "adoptions": {}
+    },
+    "anthropic-claude-code-docs": {
+      "last_checked_at": "1970-01-01T00:00:00Z",
+      "distillations": [],
+      "adoptions": {}
+    },
+    "shopify-engineering": {
+      "last_checked_at": "1970-01-01T00:00:00Z",
+      "distillations": [],
+      "adoptions": {}
+    },
+    "karpathy-autoresearch": {
+      "last_checked_at": "1970-01-01T00:00:00Z",
+      "distillations": [],
+      "adoptions": {}
+    },
+    "spotify-engineering": {
+      "last_checked_at": "1970-01-01T00:00:00Z",
+      "distillations": [],
+      "adoptions": {}
+    },
+    "martin-fowler-harness": {
+      "last_checked_at": "1970-01-01T00:00:00Z",
+      "distillations": [],
+      "adoptions": {}
+    },
+    "agents-md-spec": {
+      "last_checked_at": "1970-01-01T00:00:00Z",
+      "distillations": [],
+      "adoptions": {}
+    },
+    "atlassian-mcp": {
+      "last_checked_at": "1970-01-01T00:00:00Z",
+      "distillations": [],
+      "adoptions": {}
+    },
+    "notion-developers": {
+      "last_checked_at": "1970-01-01T00:00:00Z",
+      "distillations": [],
+      "adoptions": {}
+    },
+    "linear-changelog": {
+      "last_checked_at": "1970-01-01T00:00:00Z",
+      "distillations": [],
+      "adoptions": {}
+    }
+  }
 }
