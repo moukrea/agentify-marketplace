@@ -1,12 +1,19 @@
 ---
 name: agt-self-improve
-description: Audit the agentify project against current Claude Code/model state via online research; detect drift, gaps, and stale context entries; produce a schema-valid structured-review file under audits/ that REVISE_AGENTIFY_PROMPT.md can consume as a synthetic review (gated behind mandatory human review).
+description: Online-research audit of the agentify plugin/harness — WebFetches URLs cited in context/*.md to detect drift, WebSearches Claude Code GitHub + Anthropic engineering blog for newly-relevant issues, ingests open /agt-feedback issues. Emits a v2 finding-schema audit under audits/. Runs both in the marketplace repo (dispatched as Phase 4 of /mkt-self-improve) and in scaffolded targets (auditing the rendered harness).
 allowed-tools: WebSearch WebFetch Read Bash Edit Write
 ---
 
 # /agt-self-improve
 
 Periodic (recommended weekly via `claude /loop 7d /agt-self-improve`) or on-demand audit of the agentify project. Detects drift between the cached `context/` bundle and current Claude Code documentation / GitHub issue tracker / Anthropic engineering blog, plus drift signaled by open `/agt-feedback` issues from target repos.
+
+## When to use this skill
+
+- You want substantive online research: WebFetch against the URLs cited in `context/*.md`, WebSearch against the Claude Code issue tracker and Anthropic engineering blog, and ingestion of open `/<prefix>-feedback` issues.
+- You are in an agentified target and want to audit the rendered harness against upstream changes since the last bundle refresh.
+- You are in the agentify-marketplace repo and want only the substantive research phase (without the packaging hygiene checks `/mkt-self-improve` adds).
+- For marketplace-level packaging hygiene (manifest, governance, CI), use `/mkt-self-improve` — it dispatches this skill as Phase 4.
 
 Output: a structured-review file at `audits/<timestamp>.md` conforming to [`finding-schema.json`](../../../../finding-schema.json) (v2, post-C3). The file carries the WS-F-003 synthetic-source marker so human reviewers can detect a machine-produced audit and require explicit human-review sign-off before applying findings.
 
@@ -149,6 +156,32 @@ fi
 
 echo "Audit complete: $audit_path"
 ```
+
+## Verification gate (anti-fabrication)
+
+Before writing `audits/<ISO>.md`, verify your tool-call transcript
+for THIS session. The schema requires citations; this gate requires
+that the citations be real.
+
+1. For every URL in a finding's `references[].url`, confirm a
+   `WebFetch` call with that exact URL was made in this session.
+   The `fetched_at` timestamp must reflect the actual tool-call
+   time, not a synthesized value.
+2. For every `adoption_check_command` result you quote or summarize,
+   confirm the corresponding `Bash` invocation was made in this
+   session with that exact command.
+3. For every `WebSearch` result cited, confirm the search query was
+   executed in this session.
+4. For every `bats`, `gh`, `glab`, or `practice_track.sh` output
+   cited, confirm the corresponding `Bash` invocation was made.
+
+If ANY cited evidence has no matching tool call: HALT. Do not emit
+a partial artifact. Report to the caller the list of unverified
+citations and exit non-zero. The audit file is the contract; a
+fabricated citation in a finding is worse than no finding.
+
+This gate exists because a prior run produced an audit citing URLs
+that were never fetched.
 
 ## Notes
 

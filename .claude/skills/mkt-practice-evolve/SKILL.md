@@ -1,6 +1,6 @@
 ---
 name: mkt-practice-evolve
-description: Convention-evolution phase of /mkt-self-improve. Watches the curated sources in plugins/agentify/conventions/sources.yaml (Anthropic / Shopify / Karpathy / Vercel / Spotify / community / AGENTS.md / MCP changelogs), distils actionable recommendations, runs per-recommendation adoption checks, and surfaces unadopted patterns as practice-drift findings + ADR drafts.
+description: External-source watcher — watches Anthropic, Shopify, Karpathy, Vercel, Spotify, HumanLayer, MCP changelogs, AGENTS.md, and community sources listed in plugins/agentify/conventions/sources.yaml. Distils new posts into per-recommendation adoption checks; surfaces unadopted patterns as practice-drift findings + ADR drafts. Runs as Phase 8 of /mkt-self-improve (use /mkt-self-improve --only practice-evolve to scope to just this phase).
 ---
 
 # /mkt-practice-evolve
@@ -12,6 +12,13 @@ Per ADR 0009 invariant #4, this skill is **structurally a phase of
 `/mkt-self-improve`, not a sibling**. The convention-evolution loop is
 inseparable from the audit loop — invoking it via the parent skill
 keeps findings in one auditable document.
+
+## When to use this skill
+
+- You want to scan external engineering sources for new patterns the marketplace hasn't adopted yet.
+- Always invoke via `/mkt-self-improve` (standalone interactive invocation is not supported — per ADR 0009 invariant #4). Use `/mkt-self-improve --only practice-evolve` to scope to just this phase.
+- For online-research drift of the plugin's own `context/*.md` bundle, use `/agt-self-improve` instead.
+- For marketplace packaging hygiene, use `/mkt-self-improve` (full run).
 
 ## Operation modes
 
@@ -94,3 +101,31 @@ Either way, every machine-produced section carries:
 ```
 
 so REVISE_AGENTIFY_PROMPT.md gates apply.
+
+## Verification gate (anti-fabrication)
+
+Before writing a distillation file or updating
+`pinned-practices.json`, verify your tool-call transcript for THIS
+session. The schema requires citations; this gate requires that the
+citations be real.
+
+1. For every `source_url` recorded in a distillation file, and for
+   every URL in a finding's `references[].url`, confirm a
+   `WebFetch` (or `practice_track.sh fetch`) call with that exact
+   URL was made in this session. The `fetched_at` timestamp must
+   reflect the actual tool-call time, not a synthesized value.
+2. For every `adoption_check_command` exit code you record in
+   `pinned-practices.json`, confirm the corresponding `Bash`
+   invocation was made in this session with that exact command.
+3. For every `source_quote` field, confirm the quoted text appears
+   verbatim in the fetched body persisted under
+   `plugins/agentify/practices/raw/<source-id>/<YYYY-MM-DD>.md`.
+
+If ANY cited evidence has no matching tool call: HALT. Do not emit
+a partial distillation. Report to the caller the list of
+unverified citations and exit non-zero. The distillation file is
+the contract; a fabricated source_quote or source_url is worse
+than no recommendation.
+
+This gate exists because a prior run produced an audit citing URLs
+that were never fetched.
