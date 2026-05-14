@@ -9,6 +9,7 @@ latest. Append new rows in version order; do not edit historical rows.
 | -------- | -------- | ------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------- |
 | 4.3.0    | 4.4.0    | [v4.3.0-to-v4.4.0.md](v4.3.0-to-v4.4.0.md)        | non-breaking | Foundation pillars (governance, CI, secrets, git-host, migrations infra) become opt-in.  |
 | 4.4.0    | 5.0.0    | [v4.4.0-to-v5.0.0.md](v4.4.0-to-v5.0.0.md)        | BREAKING     | Skill enforcement gates: substantive-research postflight, lifecycle-interaction preflight, push-to-main hook refusal. |
+| 5.0.0    | 6.0.0    | [v5.0.0-to-v6.0.0.md](v5.0.0-to-v6.0.0.md)        | BREAKING     | Plan-mode adoption for design skills; FR-7 → accumulation w/ auto-generated ADR drafts; Claude Code llms.txt evolution surfacing. |
 
 ## Append-only
 
