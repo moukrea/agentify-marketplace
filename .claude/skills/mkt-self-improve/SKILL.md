@@ -97,6 +97,40 @@ Phase is gated by `agentify.config.json:.self_improve.audit_practice_currency`
 After all phases, rebuild the trends rollup:
 `bash plugins/agentify/lib/audit_aggregate.sh audits --trends`.
 
+### 10. Postflight (mandatory, hard refusal)
+
+After the audit file is written but BEFORE returning success to the
+caller, invoke the postflight gate:
+
+```bash
+bash plugins/agentify/lib/mkt_self_improve_postflight.sh "audits/<ISO>.md" \
+  || { rm -f "audits/<ISO>.md"; exit 1; }
+```
+
+The postflight enforces PRD 0003's FR-2/3/4/5/7 — substantive research,
+diversity, re-fetch verification, and discovery-loop closure. If it
+exits non-zero the audit is removed and the run reports failure. There
+is no override flag and no opt-out env var; the gates are hard refusal.
+
+What the postflight checks:
+
+- **FR-2**: audit contains `## Trend findings` heading with ≥3 bulleted
+  patterns each carrying an adoption-status marker (`adopted` /
+  `partial` / `not adopted` / `n/a`).
+- **FR-3**: `references[]` count is at least
+  `max(N_context_urls, N_authority_sources)` where the two values are
+  computed from `plugins/agentify/context/*.md` and `sources.yaml`
+  authority_weight ≥ 4 entries.
+- **FR-4**: a 20% sample of cited URLs (min 3, max 10) is re-fetched
+  and confirmed to return 2xx and contain at least one cited keyword.
+- **FR-5**: references span ≥5 distinct hostnames AND ≥2 of those
+  hostnames are NOT already on the curated authority list (forces
+  real discovery, not just re-citing known sources).
+- **FR-7**: every new-domain hostname cited in `## Trend findings`
+  has a paired draft ADR at
+  `decisions/drafts/draft-add-source-<host-slug>.md`. Generate via
+  `plugins/agentify/templates/lifecycle/add-source-adr.md.template`.
+
 ## Verification gate (anti-fabrication)
 
 Before writing `audits/<ISO>.md`, verify your tool-call transcript
