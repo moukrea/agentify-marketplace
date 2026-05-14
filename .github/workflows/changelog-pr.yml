@@ -42,7 +42,14 @@ jobs:
             echo "no changelog diff; nothing to PR"
             exit 0
           fi
-          branch="bot/changelog-$(date -u +%Y-%m-%d)"
+          # F-001 fix (audit 20260514T203350Z): the dated-only branch
+          # name collides on the second push to main of the same day
+          # because the first push's commit is already on the remote
+          # branch and `git push -u` non-fast-forwards. Appending the
+          # short SHA disambiguates per-commit while keeping the date
+          # prefix for human readability; cancel-in-progress: true
+          # above keeps run count bounded to one per "settled" commit.
+          branch="bot/changelog-$(date -u +%Y-%m-%d)-$(git rev-parse --short HEAD)"
           git config user.name  "agentify-bot"
           # H37 fix: RFC 2606 reserved TLD; some hooks reject TLD-less.
           git config user.email "agentify-bot@agentify-marketplace.invalid"
