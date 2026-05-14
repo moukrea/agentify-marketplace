@@ -32,40 +32,31 @@ setup() {
 	[ "$status" -eq 0 ]
 }
 
-@test "plugin manifest declares a commands array" {
-	run jq -e '.commands | type == "array" and length > 0' "$PLUGIN_MANIFEST"
-	[ "$status" -eq 0 ]
+@test "plugin manifest declares a skills directory path" {
+	# Post-PR-#7 (b50faeb): plugin.json conforms to the Claude Code
+	# plugin-manifest schema which makes `commands`/`hooks` optional and
+	# accepts `skills` as a path string. The pre-PR-#7 form here used to
+	# assert `.commands` / `.hooks` / per-skill commands[] entries; those
+	# assertions blocked CI on the schema-aligned manifest. The skills
+	# directory is the canonical declaration now — assert that.
+	local skills_ref
+	skills_ref=$(jq -re '.skills' "$PLUGIN_MANIFEST")
+	[ -n "$skills_ref" ]
+	[ -d "$PLUGIN_ROOT/${skills_ref#./}" ]
 }
 
-@test "plugin manifest declares the hooks manifest path" {
-	local hooks_ref
-	hooks_ref=$(jq -re '.hooks' "$PLUGIN_MANIFEST")
-	[ -n "$hooks_ref" ]
-	[ -f "$PLUGIN_ROOT/${hooks_ref#./}" ]
-}
-
-@test "every skill directory has a matching command entry" {
+@test "every skills/ subdirectory contains a SKILL.md" {
 	local missing=0
-	for dir in "$PLUGIN_ROOT/skills"/*/; do
+	local skills_dir
+	skills_dir=$(jq -re '.skills' "$PLUGIN_MANIFEST")
+	for dir in "$PLUGIN_ROOT/${skills_dir#./}"/*/; do
 		local name
 		name="$(basename "$dir")"
-		if ! jq -e --arg n "$name" '.commands[] | select(.name == $n)' "$PLUGIN_MANIFEST" >/dev/null; then
-			echo "missing command entry for skill: $name"
+		if [ ! -f "$dir/SKILL.md" ]; then
+			echo "skills/$name/ has no SKILL.md"
 			missing=$((missing + 1))
 		fi
 	done
-	[ "$missing" -eq 0 ]
-}
-
-@test "every command entry points at an existing SKILL.md" {
-	local missing=0
-	while IFS= read -r ref; do
-		local resolved="$PLUGIN_ROOT/${ref#./}"
-		if [ ! -f "$resolved" ]; then
-			echo "missing SKILL.md: $ref (resolved: $resolved)"
-			missing=$((missing + 1))
-		fi
-	done < <(jq -r '.commands[].skill' "$PLUGIN_MANIFEST")
 	[ "$missing" -eq 0 ]
 }
 
@@ -94,45 +85,25 @@ setup() {
 	local hooks_path="$PLUGIN_ROOT/hooks/hooks.json"
 	run jq -e . "$hooks_path"
 	[ "$status" -eq 0 ]
-	run jq -e '.hooks | keys | length > 0' "$hooks_path"
+	run jq -e --arg k hooks '.[$k] | keys | length > 0' "$hooks_path"
 	[ "$status" -eq 0 ]
 }
 
 # ---------------------------------------------------------------------------
-# C5 additions — close the coverage gaps the adversarial review surfaced:
-#   * reverse direction (every commands[].name -> existing skill dir)
-#   * commands[].name == basename(dirname(skill))
+# Post-PR-#7 coverage:
 #   * version parity across plugin.json and marketplace.json
 #   * every hooks.json command script resolves on disk
 #   * governance files have minimum content (not just non-empty)
+#
+# Removed at audit-20260514T132640Z (F-001): the prior "every commands[].name
+# resolves to a skill directory" and "every commands[].name matches its
+# skill directory basename" tests asserted a commands[] array in plugin.json
+# which PR #7 (b50faeb) correctly dropped to align with the Claude Code
+# plugin-manifest schema. The skills/ subtree assertions above ("plugin
+# manifest declares a skills directory path" + "every skills/ subdirectory
+# contains a SKILL.md") provide the equivalent coverage against the
+# schema-permitted shape.
 # ---------------------------------------------------------------------------
-
-@test "every command entry resolves to an existing skill directory" {
-	local missing=0
-	while IFS= read -r name; do
-		[ -d "$PLUGIN_ROOT/skills/$name" ] || {
-			echo "command '$name' has no matching skill directory at plugins/agentify/skills/$name"
-			missing=$((missing + 1))
-		}
-	done < <(jq -r '.commands[].name' "$PLUGIN_MANIFEST")
-	[ "$missing" -eq 0 ]
-}
-
-@test "every commands[].name matches its skill directory basename" {
-	local mismatched=0
-	while IFS= read -r row; do
-		local name skill expected
-		name="$(jq -r '.name' <<<"$row")"
-		skill="$(jq -r '.skill' <<<"$row")"
-		# skill: "./skills/<dir>/SKILL.md" -> basename(dirname()) == <dir>
-		expected="$(basename "$(dirname "${skill#./}")")"
-		if [ "$name" != "$expected" ]; then
-			echo "commands[].name=$name but skill resolves to dir=$expected"
-			mismatched=$((mismatched + 1))
-		fi
-	done < <(jq -c '.commands[]' "$PLUGIN_MANIFEST")
-	[ "$mismatched" -eq 0 ]
-}
 
 @test "plugin.json:.version == marketplace.json:.plugins[0].version" {
 	local plugin_ver marketplace_ver
