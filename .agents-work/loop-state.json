@@ -1,5 +1,5 @@
 {
-  "iteration": 1,
+  "iteration": 2,
   "max_iterations": 6,
   "session_id": "20260513T212022Z",
   "started_at": "2026-05-13T21:20:22Z",
@@ -10,20 +10,20 @@
     "major": 0,
     "moderate": 0,
     "polish": 0,
-    "info": 8
+    "info": 0
   },
   "prev_counts": {
     "critical": 0,
     "major": 0,
     "moderate": 0,
     "polish": 0,
-    "info": 0
+    "info": 8
   },
   "no_progress_streak": 0,
   "regression_streak": 0,
   "parked_findings": [],
-  "latest_revision_path": ".agents-work/revisions/01-mkt-self-improve-info-only.md",
-  "latest_review_path": ".agents-work/reviews/01-mkt-self-improve-info-only.md",
-  "ended_at": "2026-05-13T21:20:56Z",
+  "latest_revision_path": ".agents-work/revisions/02-prd-0002-loop-machinery-v2.md",
+  "latest_review_path": ".agents-work/reviews/02-prd-0002-loop-machinery-v2.md",
+  "ended_at": "2026-05-14T06:31:45Z",
   "exit_reason": "DONE"
 }

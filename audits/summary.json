@@ -1,13 +1,16 @@
 {
-  "generated_at": "2026-05-13T21:19:33Z",
-  "total": 10,
+  "generated_at": "2026-05-14T06:31:49Z",
+  "total": 13,
   "by_severity": {
-    "info": 10
+    "info": 10,
+    "moderate": 3
   },
   "by_category": {
+    "feature": 1,
     "meta": 3,
-    "practice-drift": 7
+    "practice-drift": 7,
+    "schema-violation": 2
   },
   "recurring": [],
-  "open_synthetic_findings": 10
+  "open_synthetic_findings": 13
 }

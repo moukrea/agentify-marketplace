@@ -75,8 +75,8 @@ If the orient checks pass, proceed to §B.
      "max_iterations": 6,
      "spot_check_counter": 0,
      "last_verdict": null,
-     "last_counts": {"critical": 0, "major": 0, "moderate": 0, "strategic": 0, "polish": 0},
-     "prev_counts": {"critical": 0, "major": 0, "moderate": 0, "strategic": 0, "polish": 0},
+     "last_counts": {"critical": 0, "major": 0, "moderate": 0, "polish": 0, "info": 0},
+     "prev_counts": {"critical": 0, "major": 0, "moderate": 0, "polish": 0, "info": 0},
      "no_progress_streak": 0,
      "caused_by_prior_revise_streak": 0,
      "agentify_md_sha": null,
@@ -246,13 +246,13 @@ Output:
 {
   "role": "review",
   "iteration": <int NN>,
-  "verdict": "ship" | "ship-after-fixes" | "do-not-ship",
+  "verdict": "healthy" | "degraded" | "broken",
   "counts": {
     "critical": <int>,
     "major":    <int>,
     "moderate": <int>,
-    "strategic":<int>,
-    "polish":   <int>
+    "polish":   <int>,
+    "info":     <int>
   },
   "context_updates": ["context/<file>#<anchor>", "..."],
   "review_path": "<reviews_dir>/NN-<ts>.md",
@@ -269,7 +269,7 @@ Constraints:
   entries you refresh during verification.
 ````
 
-Capture `$REPLY`, extract `review_json` with the same `awk` pattern, validate `jq` parse and required keys (`role`, `iteration`, `verdict`, `counts.critical`, `counts.major`, `counts.moderate`, `counts.strategic`, `counts.polish`, `review_path`).
+Capture `$REPLY`, extract `review_json` with the same `awk` pattern, validate `jq` parse and required keys (`role`, `iteration`, `verdict`, `counts.critical`, `counts.major`, `counts.moderate`, `counts.polish`, `counts.info`, `review_path`).
 
 Update `${state_root}/loop-state.json`:
 ```
@@ -293,7 +293,7 @@ jq --argjson counts  "$(jq .counts          <<< "$review_json")" \
 
 Print observability line (the path shown matches the resolved `<reviews_dir>` passed to the subagent):
 ```
-[iter NN REVIEW] verdict=V critical=A major=B moderate=C strategic=D polish=E caused_by_prior_revise=R → <reviews_dir>/NN-<ts>.md
+[iter NN REVIEW] verdict=V critical=A major=B moderate=C polish=D info=E caused_by_prior_revise=R → <reviews_dir>/NN-<ts>.md
 ```
 
 ### C4. Compute progress and parking
@@ -332,7 +332,7 @@ Overwrite (do not append) `${state_root}/session-summary.md` so the parent can r
 
 **Iteration:** NN
 **Last verdict:** <verdict>
-**Last counts:** critical=A major=B moderate=C strategic=D polish=E
+**Last counts:** critical=A major=B moderate=C polish=D info=E
 **No-progress streak:** Z
 **Parked findings:** <list or "none">
 **Latest revision:** <revision_path>
@@ -354,15 +354,16 @@ The authoritative state is `<state_root>/loop-state.json` (substitute the resolv
 In order, first match wins:
 
 ```
+<!-- ADR 0011: verdict vocab is finding-schema.json v2 (healthy|degraded|broken). -->
 CONVERGED:
-  last_verdict == "ship"
+  last_verdict == "healthy"
   AND last_counts.critical == 0
   AND last_counts.major == 0
   AND parked_findings is empty
   → exit DONE
 
 PARKED (near-done):
-  last_verdict in {"ship", "ship-after-fixes"}
+  last_verdict in {"healthy", "degraded"}
   AND last_counts.critical == 0
   AND last_counts.major == 0
   AND parked_findings non-empty
@@ -408,7 +409,7 @@ Exit reason: <DONE | PARKED | REGRESSION | STALLED | BUDGET_EXHAUSTED | SUBAGENT
 Iterations run: <N>
 
 Final verdict: <verdict>
-Final counts: critical=A major=B moderate=C strategic=D polish=E
+Final counts: critical=A major=B moderate=C polish=D info=E
 caused_by_prior_revise streak: <int> (last value of ${state_root}/loop-state.json's caused_by_prior_revise_streak)
 
 Live AGENTIFY.md: AGENTIFY.md (sha: <sha>)

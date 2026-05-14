@@ -6,6 +6,7 @@
 #
 # Public interface:
 #   practice_track fetch          <source-id>                # writes raw/<id>/<date>.md
+#   practice_track distill        <source-id>                # writes distillations/<id>/<date>.md (recommendation skeleton; ADR 0011)
 #   practice_track list_sources                              # JSON of sources.yaml (unioned with sources.local.yaml)
 #   practice_track gc             [retention-days=180]       # prunes raw/ older than N days
 #
@@ -203,6 +204,111 @@ practice_track_list_sources() {
 	practice_track__sources_json
 }
 
+# practice_track_distill <source-id>
+#
+# Reads the most recent raw fetch under
+# practices/raw/<source-id>/<date>.md and writes a
+# recommendation-schema-compliant skeleton at
+# practices/distillations/<source-id>/<date>.md. The skeleton has
+# minimum-viable frontmatter (one placeholder recommendation marked
+# status:unknown with a TODO for prose + adoption_check_command); a
+# producing skill agent (or human reviewer) populates the rest. See
+# ADR 0011.
+#
+# Exit codes:
+#   0  distillation written (or already up-to-date for today)
+#  64  missing/unknown source id
+#  65  no raw fetch found for the source (run `fetch` first)
+practice_track_distill() {
+	local source_id="${1:-}"
+	[ -z "$source_id" ] && {
+		echo "practice_track distill: missing source id" >&2
+		return 64
+	}
+
+	local source_json
+	source_json=$(practice_track__sources_json \
+		| jq -e --arg id "$source_id" '.sources[] | select(.id == $id)' 2>/dev/null) || {
+		echo "practice_track distill: unknown source id $source_id" >&2
+		return 64
+	}
+
+	local raw_dir="${PRACTICES_DIR}/raw/${source_id}"
+	[ -d "$raw_dir" ] || {
+		echo "practice_track distill: no raw fetch found for $source_id (run \`fetch\` first)" >&2
+		return 65
+	}
+
+	local latest
+	latest=$(find "$raw_dir" -maxdepth 1 -type f -name '*.md' \
+		| sort | tail -n 1)
+	[ -n "$latest" ] || {
+		echo "practice_track distill: no raw fetch found for $source_id (run \`fetch\` first)" >&2
+		return 65
+	}
+
+	local raw_basename
+	raw_basename=$(basename "$latest")
+	local out_dir="${PRACTICES_DIR}/distillations/${source_id}"
+	local out_file="${out_dir}/${raw_basename}"
+	mkdir -p "$out_dir"
+
+	local raw_hash
+	raw_hash=$(printf '%s\n' "$latest" | xargs cat | practice_track__sha256_stdin)
+
+	local source_url
+	source_url=$(printf '%s' "$source_json" | jq -r '.url')
+
+	cat > "$out_file" <<EOF
+---
+schema: pinned-practices.recommendation/1
+source_id: ${source_id}
+source_url: ${source_url}
+raw_ref: practices/raw/${source_id}/${raw_basename}
+raw_hash: ${raw_hash}
+distilled_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+distilled_by: practice_track.sh distill (ADR 0011)
+recommendations:
+  - id: ${source_id}-r1
+    title: TODO — replace with one-sentence recommendation distilled from raw
+    status: unknown
+    rationale: |
+      TODO — distilled prose from the raw fetch goes here. Cite the raw_ref
+      anchor or quote the source verbatim. The producing skill agent (or a
+      human reviewer) authors this section before the recommendation can
+      drive an adoption check.
+    adoption_check_command: |
+      # TODO — falsifiable predicate. Exit 0 = adopted, 1 = not_adopted, 2 = partial.
+      # Example: \`grep -q SOMEKEY agentify.config.json\`
+      false
+---
+
+# Distillation: ${source_id} (${raw_basename%.md})
+
+Skeleton emitted by \`practice_track.sh distill\`. The frontmatter
+above is the structured part the per-recommendation adoption check
+reads. The body below (this section) is for human-readable context:
+quotes from the source, links to anchors, and one-paragraph framing
+of why each recommendation matters for the agentify harness.
+
+> _Replace this body with distilled prose. Until then this skeleton
+> is a placeholder so \`/mkt-practice-evolve\`'s adoption-check phase
+> has a structured input file to read._
+EOF
+
+	printf 'distilled:%s\n' "$out_file"
+}
+
+practice_track__sha256_stdin() {
+	if command -v sha256sum >/dev/null 2>&1; then
+		printf 'sha256:'
+		sha256sum | awk '{print $1}'
+	else
+		printf 'sha256:'
+		shasum -a 256 | awk '{print $1}'
+	fi
+}
+
 practice_track_gc() {
 	local retention_days="${1:-180}"
 	if [ ! -d "${PRACTICES_DIR}/raw" ]; then
@@ -218,11 +324,12 @@ practice_track() {
 	shift || true
 	case "$cmd" in
 	fetch) practice_track_fetch "$@" ;;
+	distill) practice_track_distill "$@" ;;
 	list_sources) practice_track_list_sources ;;
 	gc) practice_track_gc "$@" ;;
 	"")
 		cat >&2 <<-USAGE
-			usage: practice_track <fetch|list_sources|gc> [args]
+			usage: practice_track <fetch|distill|list_sources|gc> [args]
 		USAGE
 		return 64
 		;;

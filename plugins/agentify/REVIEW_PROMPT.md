@@ -77,8 +77,9 @@ Pay special attention to:
 
 Produce a single Markdown document with these sections:
 
-1. **Verdict.** One paragraph. Ship / ship-after-fixes / do-not-ship. State the count of Critical, Major, Moderate, Minor findings.
-2. **Headline findings table.** Numbered, ranked, with severity emoji (🔴 Critical, 🟠 Major, 🟡 Moderate, 🟢 Minor). Columns: # / Severity / Issue / Where / What breaks. Aim for 15-25 findings; force-rank if more.
+<!-- ADR 0011: verdict + severity vocab follow finding-schema.json v2. -->
+1. **Verdict.** One paragraph. healthy / degraded / broken. State the count of Critical, Major, Moderate, Polish, Info findings.
+2. **Headline findings table.** Numbered, ranked, with severity emoji (🔴 Critical, 🟠 Major, 🟡 Moderate, 🟢 Polish, ⚪ Info). Columns: # / Severity / Issue / Where / What breaks. Aim for 15-25 findings; force-rank if more.
 3. **Critical findings.** One subsection per Critical. Quote the prompt text where relevant. State the bug or behavior that breaks it. Cite sources by URL. Provide a concrete fix with code.
 4. **Major findings.** Same structure. Architectural redesigns where the prompt's approach is functional but suboptimal compared to current canonical patterns.
 5. **Moderate findings.** Same structure. Correctness and robustness fixes.
