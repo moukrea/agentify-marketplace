@@ -58,22 +58,10 @@ jobs:
           git add plugins/agentify/practices plugins/agentify/conventions/pinned-practices.json
           git commit -m "chore(practices): weekly practice-evolve fetch"
           git push -u origin "$branch"
+          body_tmp=$(mktemp)
+          trap 'rm -f "$body_tmp"' EXIT
+          bash bin/practice-evolve-pr-body.sh >"$body_tmp"
           gh pr create \
             --base main --head "$branch" \
             --title "chore(practices): weekly practice-evolve fetch" \
-            --body "$(cat <<'EOF'
-Automated fetch by practice-evolve.yml.
-
-Captures new content from sources in
-`plugins/agentify/conventions/sources.yaml` since the last successful
-fetch. Distillation + adoption-check runs interactively next time a
-maintainer invokes `/mkt-practice-evolve` (or as Phase 8 of
-`/mkt-self-improve`).
-
-Reviewer checklist:
-- [ ] Raw content under `plugins/agentify/practices/raw/` looks
-  reasonable (no captcha pages / dead links).
-- [ ] No source flagged `transport_error` in
-  `plugins/agentify/conventions/pinned-practices.json`.
-EOF
-)"
+            --body-file "$body_tmp"

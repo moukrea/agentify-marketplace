@@ -88,14 +88,8 @@ jobs:
           # agentify.config.json against its schema while we have ajv
           # available (smoke-validates the dogfood).
           for s in $(git ls-files '*-schema.json'); do
-            python3 -c "
-import json, sys
-from jsonschema import Draft202012Validator
-s = sys.argv[1]
-doc = json.load(open(s))
-Draft202012Validator.check_schema(doc)
-print(f'{s} schema OK')
-" "$s" || { echo "::error file=$s::schema validation failed"; exit 1; }
+            python3 -c 'import json, sys; from jsonschema import Draft202012Validator; s = sys.argv[1]; doc = json.load(open(s)); Draft202012Validator.check_schema(doc); print(f"{s} schema OK")' "$s" \
+              || { echo "::error file=$s::schema validation failed"; exit 1; }
           done
 
   manifest-conformance:
