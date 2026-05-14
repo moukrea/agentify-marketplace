@@ -8,6 +8,7 @@ latest. Append new rows in version order; do not edit historical rows.
 | From     | To       | File                                              | Severity     | Summary                                                                                  |
 | -------- | -------- | ------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------- |
 | 4.3.0    | 4.4.0    | [v4.3.0-to-v4.4.0.md](v4.3.0-to-v4.4.0.md)        | non-breaking | Foundation pillars (governance, CI, secrets, git-host, migrations infra) become opt-in.  |
+| 4.4.0    | 5.0.0    | [v4.4.0-to-v5.0.0.md](v4.4.0-to-v5.0.0.md)        | BREAKING     | Skill enforcement gates: substantive-research postflight, lifecycle-interaction preflight, push-to-main hook refusal. |
 
 ## Append-only
 
