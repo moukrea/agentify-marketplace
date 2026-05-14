@@ -188,16 +188,17 @@ jobs:
   lifecycle-conformance:
     name: Lifecycle conformance
     runs-on: ubuntu-24.04
-    if: ${{ hashFiles('prds/**/tasks.md', 'documentation/agentic/prds/**/tasks.md') != '' }}
     steps:
       - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install jq
+        if: ${{ hashFiles('prds/**/tasks.md', 'documentation/agentic/prds/**/tasks.md') != '' }}
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends jq
 
       - name: Validate every PRD's tasks.md (≤5 phases × ≤7 tasks, falsifiable Validation)
+        if: ${{ hashFiles('prds/**/tasks.md', 'documentation/agentic/prds/**/tasks.md') != '' }}
         run: |
           set -euo pipefail
           # task_backend validate exits non-zero on any violation.
