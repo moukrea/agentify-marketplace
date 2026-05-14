@@ -345,3 +345,327 @@ Spot-check on next consumption: fetch the canonical models page and append the v
 **Status:** Stable
 
 Reserved bundled skill names: `/simplify`, `/batch`, `/debug`, `/loop`, `/claude-api`, `/review`, `/init`, `/security-review`, plus built-in commands like `/help`, `/compact`, `/agents`, `/hooks`, `/plugin`, `/status`, `/model`, `/effort`, `/permissions`, `/resume`, `/rename`, `/branch`, `/rewind`, `/statusline`, `/powerup`, `/config`. Custom skills must avoid these names. AGENTIFY convention: `{__AGT_SKILL_PREFIX__}-` prefix for skills, `{__AGT_PLUGIN_NAMESPACE__}:{__AGT_SKILL_PREFIX__}-<name>` namespace for plugin skills.
+
+---
+
+## /goal — condition-based completion loop {#goal}
+
+**Source:** https://code.claude.com/docs/en/goal (fetched 2026-05-14)
+**Last verified:** 2026-05-14
+**Status:** Stable
+
+`/goal <condition>` sets a session-scoped completion condition. After each turn a small fast model (default Haiku) evaluates the condition against the conversation so far and returns yes-or-no plus a short reason. "No" tells Claude to keep working with the reason as guidance; "yes" clears the goal and records an achieved entry. Condition up to 4,000 characters. The evaluator does not call tools — it judges what Claude has surfaced in the transcript, so write conditions whose proof appears in Claude's own output (e.g. `npm test` exit code).
+
+Shape vs. agentify constructs:
+
+- `/goal` fires per-turn (condition-based). `/agt-loop` fires on a clock (interval-based).
+- `/goal` and a Stop hook both fire after every turn — `/goal` is the session-scoped shortcut; the hook is the durable form in `settings.json`.
+- `/goal clear` (aliases `stop`/`off`/`reset`/`none`/`cancel`) cancels early. `/clear` removes any active goal alongside the conversation reset.
+- Headless: `claude -p "/goal <condition>"` loops to completion in a single invocation. Ctrl+C interrupts.
+- Unavailable when `disableAllHooks` is set at any level OR when `allowManagedHooksOnly` is set in managed settings; the command reports why rather than failing silently.
+- Resume restores active goals — turn count / timer / token-spend baseline all reset on `--resume` / `--continue`.
+
+Implication for `/agt-implement`: each task's Validation criterion is exactly the shape `/goal`'s evaluator expects. Delegating per-task completion to `/goal` replaces operator "is it done yet?" polling with model-evaluated finish.
+
+---
+
+## /sandbox — OS-level filesystem and network isolation {#sandbox}
+
+**Source:** https://code.claude.com/docs/en/sandboxing (fetched 2026-05-14)
+**Last verified:** 2026-05-14
+**Status:** Stable (macOS / Linux / WSL2); not WSL1; native Windows planned
+
+Sandboxed Bash tool enforces filesystem + network isolation via OS primitives: Seatbelt (macOS), bubblewrap (Linux / WSL2). Toggle with `/sandbox`. Two modes:
+
+- **auto-allow** — sandboxed commands run without per-use permission. Non-sandboxable commands (network outside allowlist, `docker`, etc.) fall back to regular permission flow. Explicit deny rules and `rm`/`rmdir` against `/`, `$HOME`, or critical paths always prompt.
+- **regular permissions** — all Bash commands still go through the standard permission flow even when sandboxed; filesystem / network restrictions still apply.
+
+Settings (`settings.json` `sandbox.*`):
+
+- `enabled: true`
+- `failIfUnavailable: true` — hard failure when sandbox can't start (managed-deployment gate).
+- `filesystem.allowWrite: [...]` — grants subprocess write access. Path prefixes: `/abs` (absolute), `~/relative-to-home`, `./relative-to-project-or-user-config`. The older `//abs` form still works.
+- `filesystem.denyWrite`, `filesystem.denyRead`, `filesystem.allowRead` (precedence over `denyRead`).
+- `allowManagedReadPathsOnly: true` — only managed `allowRead` entries are honored.
+- `network.allowedDomains`, `network.deniedDomains`, `network.httpProxyPort`, `network.socksProxyPort`.
+- `allowManagedDomainsOnly: true` — blocks every non-allowed domain automatically.
+- `excludedCommands: ["docker *", "watchman", ...]` — commands run outside the sandbox.
+- `allowUnsandboxedCommands: false` — disables the `dangerouslyDisableSandbox` Bash-tool escape hatch.
+
+Linux prerequisites: `bubblewrap` + `socat`. Ubuntu 24.04+ needs an AppArmor profile granting `bwrap` `userns` capability (`/etc/apparmor.d/bwrap` with `userns,` directive, then `systemctl reload apparmor`). Sandbox runtime is OSS: `npx @anthropic-ai/sandbox-runtime <cmd>`.
+
+Coverage: Bash subprocesses only. Built-in Read / Edit / Write tools use the permission system directly. Network isolation does not perform TLS inspection — broad allowlists like `github.com` permit domain-fronting-style exfiltration; install a custom CA-pinning proxy if the threat model requires inspection.
+
+---
+
+## --worktree, EnterWorktree, .worktreeinclude {#worktrees}
+
+**Source:** https://code.claude.com/docs/en/worktrees (fetched 2026-05-14)
+**Last verified:** 2026-05-14
+**Status:** Stable
+
+`claude --worktree <name>` (or `-w`) creates an isolated git worktree under `.claude/worktrees/<name>/` on branch `worktree-<name>`. Worktree branches from `origin/HEAD` (the `"fresh"` default); set `worktree.baseRef: "head"` in settings to branch from local HEAD instead — useful when isolating subagents that need access to unpushed commits. Only `"fresh"` and `"head"` are accepted; arbitrary refs are rejected.
+
+In-session creation: ask Claude to "work in a worktree" → calls the `EnterWorktree` tool. Without a name, generates one (`bright-running-fox` shape). To branch from a PR: `--worktree "#1234"` fetches `pull/1234/head` from `origin` and creates `.claude/worktrees/pr-1234`.
+
+`.worktreeinclude` at project root: `.gitignore`-syntax patterns; files matching AND gitignored are copied into each new worktree (untracked env files like `.env.local`, `config/secrets.json`). Tracked files are never duplicated. Applies to `--worktree`, subagent isolation, and desktop parallel sessions. Add `.claude/worktrees/` to `.gitignore` so worktree contents don't appear as untracked in the main checkout.
+
+Subagent isolation: set `isolation: worktree` in subagent frontmatter (or call `Agent({ isolation: "worktree" })`). Subagent worktrees auto-clean when the subagent finishes with no changes. Orphaned subagent worktrees sweep at startup once older than `cleanupPeriodDays`. `--worktree`-created worktrees are never auto-removed by the sweep.
+
+Non-git VCS: configure `WorktreeCreate` + `WorktreeRemove` hooks (replaces default git logic; `.worktreeinclude` is not processed in that mode — copy env files inside the hook script).
+
+Trust dialog gate: `claude` must be run once in the directory and trust accepted before `--worktree` works, even with `-p`.
+
+---
+
+## /loop, CronCreate / CronList / CronDelete, loop.md {#scheduled-tasks}
+
+**Source:** https://code.claude.com/docs/en/scheduled-tasks (fetched 2026-05-14)
+**Last verified:** 2026-05-14
+**Status:** Stable (v2.1.72+)
+
+In-session scheduling: the bundled `/loop` skill + `CronCreate` / `CronList` / `CronDelete` tools. Tasks are session-scoped, live in the current conversation, restored on `--resume` / `--continue` for recurring tasks within 7 days of creation and one-shots whose fire time hasn't passed.
+
+`/loop` invocation patterns:
+
+- `/loop 5m <prompt>` — fixed interval. Units: `s` / `m` / `h` / `d`. Seconds round up to the next minute. Intervals not mapping to clean cron steps (e.g., `7m`, `90m`) round to nearest. Trailing forms accepted: `every 2 hours`.
+- `/loop <prompt>` — dynamic interval. Claude picks 1m–1h between iterations based on observed activity, and may use the `Monitor` tool to stream output lines instead of polling.
+- `/loop` — built-in maintenance prompt: continue unfinished work, tend current branch's PR (review comments, failed CI, merge conflicts), run cleanup passes when nothing else is pending. Irreversible actions (push, delete) only proceed if the transcript already authorized them.
+- `/loop` with custom `.claude/loop.md` (project — wins) or `~/.claude/loop.md` (user) — replaces the built-in maintenance prompt with your default. Plain Markdown, ≤25,000 bytes, edits apply on next iteration.
+
+Cron expressions: 5-field `minute hour day-of-month month day-of-week`, vixie-cron semantics. Wildcards `*`, single values, steps `*/15`, ranges `1-5`, lists `1,15,30`. Local timezone. Day-of-week `0` or `7` = Sunday. Extended syntax (`L`, `W`, `?`, `MON`/`JAN`) NOT supported.
+
+Jitter: recurring tasks fire up to 30 min late (or half the interval, for sub-hourly cadences); one-shots at `:00` / `:30` fire up to 90 s early. Offset derived from task ID — same task gets same offset. Pick `3 9 * * *` instead of `0 9 * * *` for exact 9 AM.
+
+Limits: 50 scheduled tasks per session. 7-day recurring expiry — final fire then auto-delete (resists forgotten-loop drift). No catch-up for missed fires while Claude is busy. `CLAUDE_CODE_DISABLE_CRON=1` disables the scheduler entirely.
+
+Stop a fixed-interval `/loop` between iterations with `Esc`. Self-paced `/loop` can end on its own by not scheduling the next wakeup when the task is provably complete. Recurring tasks scheduled via `CronCreate` directly are unaffected by `Esc` — delete by ID via `CronDelete`.
+
+Relationship to `/agt-loop`: the agentify revise/review loop predates this surface and reinvents the interval construct. Migration path: move the agentify revise/review prompt body into `.claude/loop.md` and inherit the upstream's expiry + cancel-via-Esc + dynamic-interval hygiene.
+
+---
+
+## Routines — cloud-side schedule / API / GitHub-triggered sessions {#routines}
+
+**Source:** https://code.claude.com/docs/en/routines (fetched 2026-05-14)
+**Last verified:** 2026-05-14
+**Status:** Research preview
+
+A routine is a saved Claude Code configuration (prompt + repos + cloud environment + connectors) that runs autonomously on Anthropic-managed infrastructure. Each routine can attach any combination of three trigger types:
+
+- **Schedule** — recurring cadence or one-off; minimum interval 1 hour; presets hourly / daily / weekdays / weekly; custom cron via `/schedule update`.
+- **API** — POST to a per-routine `https://api.anthropic.com/v1/claude_code/routines/<trig_id>/fire` endpoint with bearer token; optional `text` body field for run-specific context; required beta header `anthropic-beta: experimental-cc-routine-2026-04-01`. Token shown once at generation, scoped to triggering that routine only. Regenerate or revoke from the same modal.
+- **GitHub** — subscribe to `pull_request.*` or `release.*` events on connected repos with filters: author, title, body, base branch, head branch, labels, is_draft, is_merged. Operators: equals, contains, starts-with, is-one-of, is-not-one-of, matches-regex (matches entire field). Per-routine and per-account hourly caps; excess events drop until reset.
+
+CLI surface: `/schedule <description>` (create), `/schedule list`, `/schedule update`, `/schedule run`. Web UI at `claude.ai/code/routines`. Both write to the same cloud account. API + GitHub triggers can only be added via web (CLI cannot create tokens or webhook subscriptions yet).
+
+Network policy: routines inherit the cloud environment's network access. **Default** environment uses **Trusted** access (curated allowlist of package registries, cloud-provider APIs, container registries, common dev domains). Outbound to non-allowed hosts returns `403` + `x-deny-reason: host_not_allowed`. MCP connector traffic is routed through Anthropic, so connectors work without adding their hosts to **Allowed domains**. Switch to **Custom** with explicit `Allowed domains` or **Full** unrestricted.
+
+Branch push policy: by default routines can only push branches prefixed `claude/`. Enable **Allow unrestricted branch pushes** per repository to lift this for trusted routines.
+
+Usage: routines draw from the account's subscription tokens; in addition each account has a **daily routine run cap**. One-off runs are exempt from the cap (count as regular sessions). Disable org-wide via the Routines toggle at `claude.ai/admin-settings/claude-code`.
+
+Relationship to `/agt-loop`: routines are the cloud-side counterpart. `/agt-loop` runs locally and inherits the session's permission / MCP context; routines run unattended on cloud infrastructure with explicit connector + env configuration. Fleet-bootstrap could ship a routine template running `/<prefix>-self-improve` on a weekly schedule without depending on GitHub Actions cron.
+
+---
+
+## Output styles — Default / Proactive / Explanatory / Learning + custom {#output-styles}
+
+**Source:** https://code.claude.com/docs/en/output-styles (fetched 2026-05-14)
+**Last verified:** 2026-05-14
+**Status:** Stable
+
+Output styles modify the system prompt to set role, tone, and output format. Built-in:
+
+- **Default** — standard software-engineering prompt.
+- **Proactive** — same guidance as auto mode without changing permission mode. Claude executes immediately, makes reasonable assumptions, prefers action over planning. Tool permission prompts still appear before tools run.
+- **Explanatory** — adds educational "Insights" between coding tasks.
+- **Learning** — collaborative learn-by-doing; Claude inserts `TODO(human)` markers in code for the user to implement.
+
+Setting: `"outputStyle": "Explanatory"` in `.claude/settings.local.json` (default scope when set via `/config` picker). Applies at session start — does NOT change mid-conversation, to keep the system prompt stable for prompt caching.
+
+Custom styles: a Markdown file with frontmatter at one of three levels:
+
+- User: `~/.claude/output-styles/<name>.md`
+- Project: `.claude/output-styles/<name>.md`
+- Managed policy: `.claude/output-styles/` inside the managed settings directory.
+
+Frontmatter (all optional):
+
+- `name` — display name; defaults to filename.
+- `description` — shown in the `/config` picker.
+- `keep-coding-instructions: true` — preserves Claude Code's built-in software-engineering guidance (use when changing communication style but still coding). Default `false`.
+- `force-for-plugin: true` — plugin output styles only: applies automatically when the plugin is enabled, overriding the user's `outputStyle` setting. First-loaded plugin wins on conflicts.
+
+Plugins can ship styles under `output-styles/` alongside skills / agents / hooks. Lifecycle skills like `/agt-clarify` are naturally `Explanatory`-shaped and could reference the built-in style as a recommended pairing.
+
+Comparisons: output styles modify the system prompt; CLAUDE.md adds a user message after; `--append-system-prompt` appends to the system prompt for one invocation; agents run with their own system prompt / model / tools; skills load task-specific instructions when invoked.
+
+---
+
+## Status line — bottom-bar shell-script renderer {#statusline}
+
+**Source:** https://code.claude.com/docs/en/statusline (fetched 2026-05-14)
+**Last verified:** 2026-05-14
+**Status:** Stable
+
+A customizable bar at the bottom of Claude Code that runs any shell script. The script receives JSON session data on stdin and Claude Code displays whatever it prints — for context-window usage, session cost, model, git branch / status, multi-line layouts.
+
+`/statusline` opens an interactive picker. Set explicitly in `settings.json`:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "/path/to/script.sh"
+  }
+}
+```
+
+Stdin payload fields available to the script include `model.display_name`, `model.id`, `workspace.current_dir`, `workspace.project_dir`, `cost.total_cost_usd`, `cost.total_duration_ms`, `context.percent_remaining`, `git.branch`, `git.dirty`, plus session / usage metadata.
+
+Multi-line: emit `\n` to render stacked lines. The `statusline-setup` bundled agent scaffolds a baseline script. Plugin-shipped status line scripts are not first-class today — bundle into a skill that writes the script + updates `settings.json` on first run.
+
+---
+
+## /fast — Opus 4.6 / 4.7 high-speed configuration {#fast-mode}
+
+**Source:** https://code.claude.com/docs/en/fast-mode (fetched 2026-05-14)
+**Last verified:** 2026-05-14
+**Status:** Research preview (requires v2.1.36+; Opus 4.7 fast mode requires v2.1.139+)
+
+`/fast` toggles fast mode — same Opus 4.6 or 4.7 quality at 2.5× speed at $30 / $150 MTok input / output. Not a different model: an API configuration that trades cost for latency. Pricing is flat across the full 1M-token window. Pre-existing context is re-billed at fast-mode rates when toggling mid-conversation — enable at session start for best cost efficiency.
+
+Toggle: `/fast` (Tab to toggle); `"fastMode": true` in user settings. Active indicator `↯` next to the prompt. Disabling `/fast` leaves the session on the same Opus version (no auto-revert) — use `/model` to switch.
+
+**2026-05-14 transition:** Opus 4.7 becomes the default fast-mode model. Before that date, opt in with `CLAUDE_CODE_ENABLE_OPUS_4_7_FAST_MODE=1`. To pin to 4.6 explicitly: `CLAUDE_CODE_OPUS_4_6_FAST_MODE_OVERRIDE=1` (takes precedence over the 4.7 opt-in). Same rate-limit pool for both.
+
+Org policy:
+
+- `fastModePerSessionOptIn: true` in managed / server-managed settings — sessions start with fast mode off; `/fast` re-enables per session. Useful when users run concurrent sessions and cost control matters.
+- `CLAUDE_CODE_DISABLE_FAST_MODE=1` — disable entirely.
+
+Effort interaction: fast mode and effort level are orthogonal. Fast mode + low effort = maximum speed; fast mode + max effort = deepest reasoning at fastest output. Effort affects thinking time; fast mode affects API configuration. Hooks can read the active effort via the `effort.level` JSON input field, and Bash subprocesses see `$CLAUDE_EFFORT` (v2.1.128+).
+
+Requirements: Anthropic Console API or subscription with extra-usage enabled; not available on Bedrock / Vertex AI / Azure Foundry. Admin enablement required for Team / Enterprise; disabled by default in those orgs.
+
+---
+
+## Plugin dependencies — semver ranges + tag-based resolution {#plugin-dependencies}
+
+**Source:** https://code.claude.com/docs/en/plugin-dependencies (fetched 2026-05-14)
+**Last verified:** 2026-05-14
+**Status:** Stable (v2.1.110+)
+
+Declare dependencies in `plugin.json`'s `dependencies[]`:
+
+```json
+{
+  "name": "deploy-kit",
+  "version": "3.1.0",
+  "dependencies": [
+    "audit-logger",
+    { "name": "secrets-vault", "version": "~2.1.0", "marketplace": "acme-shared" }
+  ]
+}
+```
+
+Each entry: bare string (latest available) OR `{name, version, marketplace}` object. `version` accepts Node semver ranges (`~2.1.0`, `^2.0`, `>=1.4`, `=2.1.0`, hyphen / comparator / caret / tilde). Pre-releases excluded unless the range opts in (`^2.0.0-0`).
+
+Tag convention: `{plugin-name}--v{version}` on the marketplace repository. Generate with `claude plugin tag --push` (validates plugin contents, checks `plugin.json` + marketplace entry agree on version, requires clean working tree, refuses on existing tag). `--dry-run` previews. Manual equivalent: `git tag <name>--v<ver>` if maintainer keeps the two manifests in sync.
+
+Resolution: list marketplace tags filtering on `{plugin-name}--v`, pick the highest semver satisfying the constraint. Resolved tag's semver tracked separately from `plugin.json`'s `version`, so constraint checks use the fetched tag even if `plugin.json` at that commit has a stale value. Cache directory name includes a 12-char commit-SHA suffix, so a maintainer force-moving a tag yields a fresh cache instead of stale reuse.
+
+Cross-marketplace dependencies: blocked by default. Allow per root `marketplace.json`:
+
+```json
+{
+  "name": "acme-tools",
+  "allowCrossMarketplaceDependenciesOn": ["acme-shared"]
+}
+```
+
+Only the root marketplace's allowlist is consulted — trust does not chain through intermediaries. Manual install of the dependency satisfies the constraint without modifying the allowlist.
+
+Error codes (surface in `claude plugin list --json`'s `errors` field, in the `/plugin` UI, in `/doctor`):
+
+- `dependency-unsatisfied` — declared dep not installed or installed but disabled.
+- `range-conflict` — combined ranges from multiple constrainers cannot intersect, OR invalid semver syntax, OR a `||` chain too complex to intersect.
+- `dependency-version-unsatisfied` — installed version outside this plugin's declared range.
+- `no-matching-tag` — dependency's repository has no `{name}--v*` tag satisfying the range.
+
+Auto-update fetches the highest satisfying tag for ALL installed plugins' combined ranges (not the marketplace's latest). Skipped updates surface in `/doctor` + `/plugin` Errors tab, naming the constraining plugin.
+
+`claude plugin prune` (v2.1.121+) removes orphaned auto-installed dependencies. `claude plugin uninstall <plugin> --prune` cleans up during uninstall. Plugins installed manually are never pruned. Flags: `--scope project|local|user`, `--dry-run`, `-y`.
+
+**Implication for agentify-marketplace:** `bin/bump-version.sh` produces `vX.Y.Z` release tags only. Add `agentify--vX.Y.Z` on the same SHA so future fleet plugins can declare `{ "name": "agentify", "version": "~6.0.0" }`.
+
+---
+
+## Plugin marketplaces — marketplace.json hosting {#plugin-marketplaces}
+
+**Source:** https://code.claude.com/docs/en/plugin-marketplaces (fetched 2026-05-14)
+**Last verified:** 2026-05-14
+**Status:** Stable
+
+A marketplace is a catalog file (`.claude-plugin/marketplace.json`) that lists plugins + sources. Users add it with `/plugin marketplace add` and refresh with `/plugin marketplace update`. Sources accepted: git repos (`./relative-path`, full git URL), local paths, npm package specs. Centralized discovery, version tracking, automatic updates.
+
+Required schema fields: `name`, `owner.name`, `plugins[]`. Each plugin entry minimally: `name`, `source`. Optional top-level: `description`, `version` (snapshot version of the marketplace catalog itself — distinct from per-plugin `version`), `allowCrossMarketplaceDependenciesOn[]` (see [plugin-dependencies](#plugin-dependencies)).
+
+Host on GitHub / GitLab / any git host. Push changes → users refresh with `/plugin marketplace update`. The marketplace and the plugin sources can live in the same repo (this marketplace's shape) or separately.
+
+**This marketplace** (`.claude-plugin/marketplace.json`): declares `name: "agentify-marketplace"`, `owner: { name: "moukrea" }`, one plugin `agentify` from `./plugins/agentify`. Schema-conformant per `https://json.schemastore.org/claude-code-marketplace.json`. Tier-2 fleet marketplaces are scaffolded by `/mkt-fleet-bootstrap` and mirror this shape with a fleet-specific plugin prefix.
+
+---
+
+## Headless mode — programmatic `claude -p` invocation {#headless}
+
+**Source:** https://code.claude.com/docs/en/headless (fetched 2026-05-14 via llms.txt index)
+**Last verified:** 2026-05-14
+**Status:** Stable
+
+`claude -p "<prompt>"` runs a one-shot non-interactive session. Output streams to stdout. Useful for CI, scripts, scheduled tasks, and combining with `/loop` or `/goal` in non-interactive mode.
+
+Interactive constructs in headless: `AskUserQuestion` and `ExitPlanMode` can be satisfied by a `PreToolUse` hook returning `permissionDecision: "allow"` plus `updatedInput.answers` (or plan approval). Without such a hook, the headless session blocks on the prompt.
+
+Interrupt with Ctrl+C. Used by agentify's `/agt-feedback --dry-run` flag, by `/agt-implement`'s task-by-task delegation, and by any CI integration invoking Claude Code from a non-interactive shell. Routines and `/loop -p` rely on this mode.
+
+---
+
+## Channels — push events into a running session {#channels}
+
+**Source:** https://code.claude.com/docs/en/channels (fetched 2026-05-14 via llms.txt index)
+**Last verified:** 2026-05-14
+**Status:** Stable
+
+Channels are the event-driven counterpart to `/loop`'s interval polling. External systems (CI, deploy pipelines, monitoring) push events into a running Claude Code session via a per-session channel endpoint; Claude reacts in the next available turn rather than re-running a polling prompt.
+
+`--channels` enables the channel endpoint at session start. As of week 18 / 19 2026 (`whats-new/2026-w19`), `--channels` works with console / API-key authentication, not just claude.ai accounts.
+
+Relationship to `/loop`: prefer channels when an external system can push the trigger; prefer `/loop` when polling is the only available shape. Both are session-scoped — neither survives session exit (use Routines for that).
+
+---
+
+## Hooks guide — automation walkthrough {#hooks-guide}
+
+**Source:** https://code.claude.com/docs/en/hooks-guide (fetched 2026-05-14 via llms.txt index)
+**Last verified:** 2026-05-14
+**Status:** Stable
+
+Companion to the [hooks reference](#hooks). The guide walks through prompt-based Stop hooks (the mechanism underpinning `/goal`), command-based PreToolUse hooks (the deterministic permission-decision shape), and the new `effort.level` JSON input field shipped in v2.1.128+ (Bash subprocesses see `$CLAUDE_EFFORT`). Hooks scoped to a single skill's lifecycle declare under the skill's frontmatter `hooks:` field.
+
+The reference at [hooks](#hooks) covers schemas + exit codes; the guide covers when-to-use-which. Both should be consulted when adding gates to `plugins/agentify/hooks/`.
+
+---
+
+## Agent SDK — overview {#agent-sdk-overview}
+
+**Source:** https://code.claude.com/docs/en/agent-sdk/overview (fetched 2026-05-14 via llms.txt index)
+**Last verified:** 2026-05-14
+**Status:** Stable (entry to a 30-doc subsection)
+
+The Agent SDK is Anthropic's library for building agentic applications outside the Claude Code CLI — it shares the agent loop, custom tools, hooks, MCP, file checkpointing, permissions, sessions, skills, subagents, streaming output, tool search, and todo tracking with the CLI but exposes them as Python / TypeScript APIs.
+
+Adjacent agentify-relevant doc paths in the 30-doc agent-sdk section: `agent-sdk/agent-loop`, `agent-sdk/hooks`, `agent-sdk/permissions`, `agent-sdk/sessions`, `agent-sdk/skills`, `agent-sdk/slash-commands`, `agent-sdk/subagents`, `agent-sdk/todo-tracking`, `agent-sdk/tool-search`, `agent-sdk/structured-outputs`. The harness's revise/review loop is conceptually an Agent SDK shape implemented via the CLI's `Bash` + `Edit` + `Agent` tools rather than via the SDK directly.
+
+Not currently consumed by `/agt-*` skills (they orchestrate the CLI from the inside), but a future fleet-bootstrap could ship an Agent SDK harness variant for tenants who want the harness as a library rather than as a plugin.
