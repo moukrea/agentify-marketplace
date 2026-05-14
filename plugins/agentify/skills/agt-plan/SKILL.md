@@ -35,6 +35,17 @@ Uses `plugins/agentify/templates/lifecycle/plan.md.template`:
 - **Verification plan**: test commands + observable signals — the
   exact list `/<prefix>-implement` will follow.
 
+## Preflight (mandatory, hard refusal — PRD 0003 FR-6)
+
+Same contract as `/agt-prd` (see that skill's Preflight section for the two
+interaction paths). Invocation:
+
+```bash
+bash plugins/agentify/lib/agt_plan_preflight.sh "$body_file" --user-reviewed="$draft_sha" \
+  || { echo "preflight refused; not persisting"; exit 1; }
+bash plugins/agentify/lib/task_backend.sh plan_create "$prd_ref" "$title" "$body_file"
+```
+
 ## Storage
 
 `task_backend plan_create <prd-ref> <title> <body-file>`. Returns the

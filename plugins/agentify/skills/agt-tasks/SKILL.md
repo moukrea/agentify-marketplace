@@ -41,6 +41,18 @@ Calls `task_backend task_create <plan-ref> <title> <body> <validation>`
 once per task. The markdown driver appends bullets to `tasks.md`; other
 drivers create Sub-task issues / checklist items.
 
+## Preflight (mandatory, hard refusal — PRD 0003 FR-6)
+
+Same contract as `/agt-prd` (see that skill's Preflight section for the two
+interaction paths). The tasks artifact is `<prd-dir>/tasks.md`. Invocation
+gates each persist of the full tasks.md (not each individual task_create call):
+
+```bash
+bash plugins/agentify/lib/agt_tasks_preflight.sh "$tasks_md" --user-reviewed="$tasks_sha" \
+  || { echo "preflight refused; not persisting"; exit 1; }
+# THEN call task_backend task_create for each task, OR write tasks.md directly.
+```
+
 ## Authoring flow
 
 1. Read the plan ref via `task_backend plan_get <ref>`.
