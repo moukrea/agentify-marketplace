@@ -92,8 +92,12 @@ session_interaction_check() {
 		return 1
 	fi
 
-	# Scan the transcript for a post-draft AskUserQuestion or user message.
-	# Each jsonl line is a self-contained event; jq extracts type + timestamp.
+	# Scan the transcript for a post-draft interaction event. Three event
+	# types satisfy the gate (PRD 0004 FR-2 / FR-6):
+	#   (a) user message — direct freeform reply
+	#   (b) AskUserQuestion tool call — structured choice
+	#   (c) ExitPlanMode tool call — plan-mode native approval (v6.0 path)
+	# Each jsonl line is self-contained; jq extracts type/name + timestamp.
 	local interaction_found
 	interaction_found=$(jq -r --arg cutoff "${draft_iso}Z" '
 		select(
@@ -101,7 +105,8 @@ session_interaction_check() {
 			(.timestamp > $cutoff) and
 			(
 				(.type == "user") or
-				(.message?.content? // [] | (type == "array") and (.[]? | .name? == "AskUserQuestion"))
+				(.message?.content? // [] | (type == "array") and (.[]? | .name? == "AskUserQuestion")) or
+				(.message?.content? // [] | (type == "array") and (.[]? | .name? == "ExitPlanMode"))
 			)
 		) | "interaction"
 	' "$active_transcript" 2>/dev/null | head -1)
@@ -110,10 +115,10 @@ session_interaction_check() {
 		return 0
 	fi
 
-	printf '%s preflight: REFUSED — no AskUserQuestion or user reply found in transcript after %s\n' \
+	printf '%s preflight: REFUSED — no AskUserQuestion, ExitPlanMode, or user reply found in transcript after %s\n' \
 		"$skill_name" "$draft_iso" >&2
 	printf 'Active transcript: %s\n' "$active_transcript" >&2
-	printf 'Fix: invoke AskUserQuestion on the draft, OR pass --user-reviewed=$(sha256sum %s | cut -d" " -f1)\n' "$draft_file" >&2
+	printf 'Fix: invoke EnterPlanMode + ExitPlanMode (v6.0 default), invoke AskUserQuestion, OR pass --user-reviewed=$(sha256sum %s | cut -d" " -f1)\n' "$draft_file" >&2
 	return 1
 }
 

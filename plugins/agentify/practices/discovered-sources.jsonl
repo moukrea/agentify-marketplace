@@ -1,0 +1,8 @@
+# discovered-sources.jsonl — per PRD 0004 (v6.0 FR-3). Append-only log of new-domain citations from /mkt-self-improve audits.
+# Schema (one JSON object per line): {domain, audit_id, trend_context_quote, ref_url, ts}
+# - domain: bare hostname (e.g. shopify.engineering)
+# - audit_id: ISO-8601 audit timestamp basename
+# - trend_context_quote: short excerpt from the audit's `## Trend findings` section that mentions this domain
+# - ref_url: full URL of the citation
+# - ts: ISO-8601 UTC of the postflight invocation
+# Lines starting with `#` are skipped by the parser.

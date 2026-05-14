@@ -15,6 +15,67 @@ Commits since the most recent `vX.Y.Z` tag; do not edit manually
 unless you intend to override the auto-derivation (and add an explicit
 note here saying so)._
 
+## [agentify 6.0.0] — 2026-05-14
+
+This is the v5.0.0 → v6.0.0 BREAKING release. See
+`plugins/agentify/migrations/v5.0.0-to-v6.0.0.md` for the operator
+walkthrough; full requirements + acceptance criteria live in
+`prds/0004-v6-0-plan-mode-integration-discovery-accumulatio/`.
+
+The release encodes the principle that the harness exists to *make
+Claude Code BETTER*, not impede it. Three coordinated changes ride
+Claude Code's evolution rather than freezing against the v5.0
+snapshot: native plan-mode adoption for the lifecycle design skills,
+discovery-friction softened from per-citation ADR drafts to
+threshold-N accumulation, and an explicit Claude Code surface
+evolution discovery step in `/mkt-self-improve` Phase 4.
+
+### Added (PRD 0004)
+
+- **gates**: `plugins/agentify/lib/session_interaction_check.sh`
+  extended to accept `ExitPlanMode` tool calls (transcript scan, after
+  draft mtime) as interaction evidence. Plan-mode-driven flows now
+  satisfy FR-6 naturally.
+- **gates**: `plugins/agentify/practices/discovered-sources.jsonl` —
+  append-only log of new-domain trend citations. Committed (NOT
+  gitignored). Each line is one citation event with `domain`, `audit_id`,
+  `trend_context_quote`, `ref_url`, `ts`.
+- **schema**: `agentify-config.schema.json:.self_improve.discovery_threshold`
+  (integer, default 3, minimum 2) — configurable N for ADR-draft auto-
+  generation.
+- **postflight**: auto-generation of `decisions/drafts/draft-add-source-<slug>.md`
+  from `plugins/agentify/templates/lifecycle/add-source-adr.md.template`
+  when a domain crosses the threshold.
+- **mkt-self-improve Phase 4**: explicit `llms.txt` substep — WebFetch
+  `https://code.claude.com/docs/llms.txt` and surface newly-added doc
+  paths as Trend-findings entries.
+- **known-bugs.md**: entries for upstream Claude Code issues #20397
+  (PostToolUse on ExitPlanMode silently drops on clear-context), #21282
+  (plan-mode invisible to hooks), #22343 (ExitPlanMode hook wrong cwd).
+  The v6.0 design routes around all three by harness-owning the
+  persistence path rather than depending on the hook.
+- **tests**: 14 new bats tests across `tests/plan-mode-prose.bats`,
+  `tests/exit-plan-mode-preflight.bats`,
+  `tests/discovered-sources-accumulation.bats`; 5 additional in
+  `tests/skill-gate-wiring.bats` covering v6.0 invariants.
+
+### Changed
+
+- **agt-prd / agt-plan / agt-tasks SKILL.md prose** — each mandates
+  `EnterPlanMode` at skill entry. The native plan-mode UI is now the
+  canonical approval surface for design phases.
+- **mkt_self_improve_postflight.sh FR-7 rewritten** from per-citation
+  ADR requirement to threshold-N accumulation. Discovery is free
+  pre-threshold; durable-interest signals drive ADR drafts.
+
+### Breaking
+
+- Direct-cutover. The v5.0 looser FR-7 behavior (per-citation ADR
+  required) is replaced wholesale. No compatibility shim env-var.
+- Headless lifecycle callers must adopt plan-mode OR continue using
+  the legacy `--user-reviewed=<sha>` flag path (still supported as
+  fallback per the migration doc Step M1).
+
 ## [agentify 5.0.0] — 2026-05-14
 
 This is the v4.4.0 → v5.0.0 BREAKING release. See

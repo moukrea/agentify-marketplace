@@ -58,6 +58,19 @@ Delegate to the target-side `/agt-self-improve` skill running with
 freshness, `plugins/agentify/context/known-bugs.md` against upstream
 issues, etc.). Surface its findings inline.
 
+**Sub-step (v6.0 PRD 0004 FR-5 — Claude Code surface evolution):**
+Additionally, WebFetch `https://code.claude.com/docs/llms.txt` (Claude
+Code's documentation index). Diff the URL list against URLs cited in
+`plugins/agentify/context/claude-code-mechanics.md` AND
+`plugins/agentify/context/verification-cookbook.md`. For any
+newly-added doc paths NOT yet referenced from the cached context,
+add a Trend-findings entry naming the new doc/feature + an adoption
+status (`adopted` if the harness already uses the documented mechanic;
+`partial` if partially; `not adopted` for genuinely new features that
+warrant evaluation). This turns the audit into the discovery loop for
+Claude Code evolution itself — the harness rides Claude Code's
+evolution rather than freezing against a snapshot.
+
 ### 5. Community-feedback aggregation
 
 `bash plugins/agentify/lib/feedback_ingest.sh` returns a JSON array.

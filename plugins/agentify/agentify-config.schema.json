@@ -254,7 +254,13 @@
         "scope": { "type": "string", "enum": ["auto", "marketplace", "target"], "default": "auto" },
         "cadence_days": { "type": "integer", "minimum": 1, "maximum": 365, "default": 7 },
         "audit_lifecycle_layer": { "type": "boolean", "default": true },
-        "audit_practice_currency": { "type": "boolean", "default": true }
+        "audit_practice_currency": { "type": "boolean", "default": true },
+        "discovery_threshold": {
+          "type": "integer",
+          "minimum": 2,
+          "default": 3,
+          "description": "Per PRD 0004 (v6.0). When a self-improve audit cites a new-domain hostname in `## Trend findings`, the postflight appends a JSONL entry to `plugins/agentify/practices/discovered-sources.jsonl` instead of immediately requiring a draft ADR. When the same domain has been cited in this many distinct audits, the postflight auto-generates the draft ADR. Lower = eager ADR drafts; higher = quiet accumulation."
+        }
       }
     },
     "upgrade": {

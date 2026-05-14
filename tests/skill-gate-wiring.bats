@@ -93,3 +93,39 @@ REPO="$BATS_TEST_DIRNAME/.."
 	[ -d "$REPO/decisions/drafts" ]
 	grep -qE '^decisions/drafts/draft-' "$REPO/.gitignore"
 }
+
+# -- v6.0 PRD 0004 ----------------------------------------------------
+
+@test "v6.0: each design SKILL.md mandates EnterPlanMode on a non-comment line" {
+	for skill in agt-prd agt-plan agt-tasks; do
+		run bash -c "grep -nE 'EnterPlanMode' '$REPO/plugins/agentify/skills/$skill/SKILL.md' | grep -v '^[0-9]*:[[:space:]]*[#<]'"
+		[ "$status" -eq 0 ] || { echo "missing EnterPlanMode prose in: $skill"; return 1; }
+		[ -n "$output" ]
+	done
+}
+
+@test "v6.0: mkt-self-improve SKILL.md references code.claude.com/docs/llms.txt" {
+	run bash -c "grep -nE 'code\\.claude\\.com/docs/llms\\.txt' '$REPO/.claude/skills/mkt-self-improve/SKILL.md' | grep -v '^[0-9]*:[[:space:]]*[#<]'"
+	[ "$status" -eq 0 ]
+	[ -n "$output" ]
+}
+
+@test "v6.0: agentify-config.schema.json declares self_improve.discovery_threshold (integer, default 3, minimum 2)" {
+	local schema="$REPO/plugins/agentify/agentify-config.schema.json"
+	run jq -e '.properties.self_improve.properties.discovery_threshold | .type == "integer" and .default == 3 and .minimum == 2' "$schema"
+	[ "$status" -eq 0 ]
+}
+
+@test "v6.0: discovered-sources.jsonl exists and is NOT gitignored" {
+	[ -s "$REPO/plugins/agentify/practices/discovered-sources.jsonl" ]
+	! grep -qE 'discovered-sources\.jsonl' "$REPO/.gitignore" || {
+		echo "discovered-sources.jsonl should NOT be gitignored"; return 1
+	}
+}
+
+@test "v6.0: known-bugs.md documents upstream issues #20397 #21282 #22343" {
+	local kb="$REPO/plugins/agentify/context/known-bugs.md"
+	for issue in '#20397' '#21282' '#22343'; do
+		grep -qF "$issue" "$kb" || { echo "known-bugs missing $issue"; return 1; }
+	done
+}
