@@ -1,9 +1,17 @@
 ---
 name: mkt-self-improve
-description: Marketplace-scope self-improvement audit. Examines the agentify-marketplace product surface (manifest conformance, governance docs, CI status, plugin product quality, community feedback aggregation, ADR freshness, lifecycle conformance, practice currency) and emits a finding-schema-conformant audit document under audits/<ISO>.md. Includes the /mkt-practice-evolve phase inline (configurable).
+description: Packaging + hygiene audit for THIS agentify-marketplace repo (not for scaffolded targets). Checks manifest conformance, governance docs, CI status, ADR freshness, lifecycle invariants; delegates plugin online-research drift checks to /agt-self-improve (Phase 4) and external-source practice tracking to /mkt-practice-evolve (Phase 8). Emits a finding-schema v2 audit at audits/<ISO>.md.
 ---
 
 # /mkt-self-improve
+
+## When to use this skill
+
+- You are in the agentify-marketplace repo (it contains `.claude-plugin/marketplace.json`).
+- You want a hygiene/packaging audit of the marketplace itself — manifest, governance, CI, ADR freshness, lifecycle.
+- For online-research drift of the agentify plugin's `context/*.md` bundle, this skill dispatches `/agt-self-improve` as Phase 4 — invoke it directly if that is the only thing you need.
+- For external-source practice tracking (Anthropic / Shopify / etc.), this skill dispatches `/mkt-practice-evolve` as Phase 8 — scope to just that with `/mkt-self-improve --only practice-evolve`.
+- Do NOT use this skill in a scaffolded target. Use the target's `/<prefix>-self-improve` (the rendered `/agt-self-improve`) instead.
 
 Marketplace-scope audit. **Do not use this skill inside a scaffolded
 target** — that's what `/<prefix>-self-improve` is for. Auto-detect: this
@@ -88,6 +96,32 @@ Phase is gated by `agentify.config.json:.self_improve.audit_practice_currency`
 
 After all phases, rebuild the trends rollup:
 `bash plugins/agentify/lib/audit_aggregate.sh audits --trends`.
+
+## Verification gate (anti-fabrication)
+
+Before writing `audits/<ISO>.md`, verify your tool-call transcript
+for THIS session. The schema requires citations; this gate requires
+that the citations be real.
+
+1. For every URL in a finding's `references[].url`, confirm a
+   `WebFetch` call with that exact URL was made in this session.
+   The `fetched_at` timestamp must reflect the actual tool-call
+   time, not a synthesized value.
+2. For every `adoption_check_command` result you quote or summarize,
+   confirm the corresponding `Bash` invocation was made in this
+   session with that exact command.
+3. For every `WebSearch` result cited, confirm the search query was
+   executed in this session.
+4. For every `bats`, `gh`, `glab`, or `practice_track.sh` output
+   cited, confirm the corresponding `Bash` invocation was made.
+
+If ANY cited evidence has no matching tool call: HALT. Do not emit
+a partial artifact. Report to the caller the list of unverified
+citations and exit non-zero. The audit file is the contract; a
+fabricated citation in a finding is worse than no finding.
+
+This gate exists because a prior run produced an audit citing URLs
+that were never fetched.
 
 ## Synthetic-source marker
 

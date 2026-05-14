@@ -17,6 +17,23 @@ This plugin ships six skills. The five `agt-*` skills use the configured `skills
 
 Every skill's `SKILL.md` lives under `skills/<name>/`.
 
+### Self-improvement skill layering
+
+Three skills cover overlapping ground. Use this map to pick:
+
+| Skill | Scope | What it actually does |
+| --- | --- | --- |
+| `/mkt-self-improve` | THIS marketplace repo | Packaging/hygiene: manifest, governance, CI, ADRs, lifecycle. Dispatches the two below as Phases 4 and 8. |
+| `/agt-self-improve` | Plugin source OR scaffolded target | Online research: WebFetch cited context URLs, WebSearch Claude Code issues + Anthropic blog, ingest `/agt-feedback` issues. |
+| `/mkt-practice-evolve` | External sources | Watches Anthropic / Shopify / Karpathy / Vercel / Spotify / HumanLayer / MCP changelogs / AGENTS.md / community for new patterns. |
+
+Rules of thumb:
+
+- In an agentified target → only `/agt-self-improve` is available (rendered with your configured prefix).
+- In this marketplace repo, want everything → `/mkt-self-improve`.
+- In this marketplace repo, want only the research without packaging hygiene → `/agt-self-improve` directly.
+- In this marketplace repo, want only external-source watching → `/mkt-self-improve --only practice-evolve`.
+
 ## Config schema
 
 Defined in [`../../agentify-config.schema.json`](../../agentify-config.schema.json) (Draft 2020-12). Required fields:
