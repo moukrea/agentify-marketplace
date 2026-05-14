@@ -180,12 +180,14 @@ CTX
 	[[ "$output" =~ "FR-5:" ]]
 }
 
-# -- AC-6: new domain in trend findings without paired draft ADR -------
+# -- v6.0 PRD 0004 FR-3: accumulation semantics ---------------------------
+# v5.0 behaviour (every new-domain → ADR required) is REPLACED. Below:
+#   - Single new-domain citation → JSONL appended, postflight PASSES.
+#   - Threshold-crossing requires ADR; tested in tests/discovered-sources-accumulation.bats.
 
-@test "AC-6: new-domain trend citation without paired draft ADR fails FR-7" {
+@test "AC-6 (v6.0): single new-domain trend citation PASSES (pre-threshold)" {
 	setup_postflight_sandbox
-	# 5 distinct hosts, 2 outside curated list, but trend section cites
-	# a new domain (example.com) with no draft-add-source-example-com.md.
+	# 6 distinct hosts, 4 outside curated list, but no domain is yet at threshold.
 	refs="https://code.claude.com/docs/en/hooks|hooks reference;https://code.claude.com/docs/en/skills|skills reference;https://www.anthropic.com/engineering/x|x;https://example.com/discover|discovery;https://shopify.engineering/y|y;https://martinfowler.com/articles/z|martin"
 	{
 		printf '## Trend findings\n'
@@ -204,18 +206,23 @@ CTX
 		printf 'fixture body with words: %s\n' "$note" >"${cache_dir}/${sha}"
 	done
 	run bash "$POSTFLIGHT" "$SANDBOX/audit-new-domain.md"
+	# v6.0 expectation: PASSES (pre-threshold), discovered-sources.jsonl
+	# accumulates the citations.
+	[ "$status" -eq 0 ]
+	# Verify the JSONL accumulation happened — should have entries for the
+	# 3 new-domain trend hosts (example.com, shopify.engineering, martinfowler.com).
+	[ -f "$SANDBOX/plugins/agentify/practices/discovered-sources.jsonl" ]
+	jsonl_entries=$(grep -cE '^\{' "$SANDBOX/plugins/agentify/practices/discovered-sources.jsonl" || echo 0)
+	# Trend section mentions example.com + shopify.engineering as new domains
+	# (martinfowler.com is only in references[], not in trend bullets).
+	[ "$jsonl_entries" -ge 2 ]
 	teardown_postflight_sandbox
-	[ "$status" -ne 0 ]
-	[[ "$output" =~ "FR-7:" ]]
-	[[ "$output" =~ "draft-add-source-example-com" ]] ||
-		[[ "$output" =~ "draft-add-source-shopify-engineering" ]]
 }
 
-# -- AC-6 inverse: known-good audit (with draft ADR) passes -------------
+# -- v6.0: PASSES even WITH ADR (pre-threshold, ADR is harmless) ---------
 
-@test "FR-7 satisfied: new-domain trend citation WITH paired draft ADR passes" {
+@test "FR-7 v6.0 satisfied: new-domain trend citation PASSES (ADR optional pre-threshold)" {
 	setup_postflight_sandbox
-	# Same as previous test, but the required draft ADR IS present.
 	refs="https://code.claude.com/docs/en/hooks|hooks reference;https://code.claude.com/docs/en/skills|skills reference;https://www.anthropic.com/engineering/x|x;https://example.com/discover|discovery;https://shopify.engineering/y|y;https://martinfowler.com/articles/z|martin"
 	{
 		printf '## Trend findings\n'
@@ -224,11 +231,10 @@ CTX
 		printf -- '- not adopted: pattern C (https://shopify.engineering/y)\n\n'
 		emit_audit_json "$refs"
 	} >"$SANDBOX/audit-good.md"
-	# Drop the required ADR drafts.
+	# Drop the ADR drafts — harmless even though pre-threshold doesn't require them.
 	for slug in "example-com" "shopify-engineering"; do
 		printf '# ADR draft\n' >"$SANDBOX/decisions/drafts/draft-add-source-${slug}.md"
 	done
-	# Pre-seed fetch cache.
 	cache_dir="/tmp/mkt-postflight-cache"
 	mkdir -p "$cache_dir"
 	for entry in "https://code.claude.com/docs/en/hooks|hooks reference" "https://code.claude.com/docs/en/skills|skills reference" "https://www.anthropic.com/engineering/x|x" "https://example.com/discover|discovery" "https://shopify.engineering/y|y" "https://martinfowler.com/articles/z|martin"; do

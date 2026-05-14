@@ -173,40 +173,129 @@ if [ "$out_of_list_count" -lt 2 ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# FR-7 — each new-domain hostname cited in Trend findings MUST have a draft ADR.
+# FR-7 (rewritten in v6.0 PRD 0004) — accumulation-based discovery.
+#
+# Old v5.0 behaviour: every new-domain hostname cited in Trend findings
+# MUST have a paired draft ADR. Result: per-citation friction discouraged
+# discovery. The model gravitated toward re-citing known sources.
+#
+# New v6.0 behaviour: extract new-domain citations, append each to
+# `plugins/agentify/practices/discovered-sources.jsonl` (under flock for
+# concurrency safety), count distinct audit-ids per domain across the
+# accumulated log, and require a draft ADR ONLY for domains that have
+# crossed the configurable threshold N (default 3). Pre-threshold
+# citations are silent — discovery is free.
 # ---------------------------------------------------------------------------
 mkdir -p "$DRAFTS_DIR"
-# Hostnames mentioned in the trend section's URLs.
-trend_hosts=()
-while IFS= read -r url; do
-	[ -n "$url" ] || continue
-	trend_hosts+=("$(extract_host "$url")")
-done < <(printf '%s' "$trend_section" | grep -oE 'https?://[^[:space:])>"]+' | sort -u)
+DISCOVERED_LOG="${REPO_ROOT}/plugins/agentify/practices/discovered-sources.jsonl"
+mkdir -p "$(dirname "$DISCOVERED_LOG")"
+[ -f "$DISCOVERED_LOG" ] || printf '# accumulation log\n' >"$DISCOVERED_LOG"
+
+# Threshold from agentify.config.json:.self_improve.discovery_threshold,
+# default 3, minimum 2 (per agentify-config.schema.json).
+DISCOVERY_THRESHOLD=3
+config_file="${REPO_ROOT}/agentify.config.json"
+if [ -f "$config_file" ]; then
+	cfg_val=$(jq -r '.self_improve.discovery_threshold // empty' "$config_file" 2>/dev/null) || cfg_val=""
+	if [ -n "$cfg_val" ] && [[ "$cfg_val" =~ ^[0-9]+$ ]] && [ "$cfg_val" -ge 2 ]; then
+		DISCOVERY_THRESHOLD="$cfg_val"
+	fi
+fi
+
+# Extract audit_id from the audit JSON block.
+audit_id=$(echo "$audit_json" | jq -r '.audit_id')
+audit_ts=$(echo "$audit_json" | jq -r '.produced_at // "1970-01-01T00:00:00Z"')
 
 host_slug() {
 	# Convert hostname to a filename-safe slug: lowercase, dots → dashes.
 	printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr '.' '-'
 }
 
-missing_drafts=()
+# Hostnames mentioned in the trend section's URLs.
+trend_hosts=()
+trend_urls=()
+while IFS= read -r url; do
+	[ -n "$url" ] || continue
+	trend_hosts+=("$(extract_host "$url")")
+	trend_urls+=("$url")
+done < <(printf '%s' "$trend_section" | grep -oE 'https?://[^[:space:])>"]+' | sort -u)
+
+# Append new-domain citations to the accumulation log (under flock).
+# Each line is a self-contained JSON object; the file is the discovery trail.
+i=0
 for host in "${trend_hosts[@]:-}"; do
-	[ -n "$host" ] || continue
+	[ -n "$host" ] || { i=$((i + 1)); continue; }
 	if [ -z "${curated_hosts[$host]:-}" ]; then
-		slug=$(host_slug "$host")
-		draft="${DRAFTS_DIR}/draft-add-source-${slug}.md"
-		if [ ! -f "$draft" ]; then
-			missing_drafts+=("$host -> $draft")
-		fi
+		# Extract a short context quote: 80 chars around the first occurrence.
+		quote=$(printf '%s' "$trend_section" | grep -F "${trend_urls[$i]}" | head -1 | tr -s '[:space:]' ' ' | cut -c1-160)
+		(
+			flock -x 9
+			jq -nc \
+				--arg domain "$host" \
+				--arg audit_id "$audit_id" \
+				--arg quote "$quote" \
+				--arg url "${trend_urls[$i]}" \
+				--arg ts "$audit_ts" \
+				'{domain:$domain, audit_id:$audit_id, trend_context_quote:$quote, ref_url:$url, ts:$ts}' \
+				>>"$DISCOVERED_LOG"
+		) 9>>"$DISCOVERED_LOG"
 	fi
+	i=$((i + 1))
 done
 
-if [ "${#missing_drafts[@]}" -gt 0 ]; then
+# Count distinct audit-ids per domain in the accumulation log.
+# Threshold check: any domain with >= DISCOVERY_THRESHOLD distinct citations
+# triggers AUTO-GENERATION of a draft ADR (if missing). Postflight then PASSES
+# — the discovery accumulation is the gate; the draft ADR is the artifact for
+# maintainer review.
+# Template lives in the plugin source (next to this script's lib/), not in
+# the consuming repo (REPO_ROOT may differ in tests / tenant installs).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ADR_TEMPLATE="${SCRIPT_DIR}/../templates/lifecycle/add-source-adr.md.template"
+declare -A counted_for_host=()
+generated_drafts=()
+while IFS= read -r line; do
+	# Skip comment + empty lines.
+	[[ "$line" =~ ^#|^[[:space:]]*$ ]] && continue
+	host=$(printf '%s' "$line" | jq -r '.domain // empty' 2>/dev/null) || continue
+	[ -z "$host" ] && continue
+	[ -n "${counted_for_host[$host]:-}" ] && continue
+	# Count distinct audit_ids for this host.
+	count=$(grep -F "\"domain\":\"$host\"" "$DISCOVERED_LOG" 2>/dev/null |
+		jq -r '.audit_id' 2>/dev/null | sort -u | wc -l)
+	if [ "$count" -ge "$DISCOVERY_THRESHOLD" ]; then
+		slug=$(host_slug "$host")
+		draft="${DRAFTS_DIR}/draft-add-source-${slug}.md"
+		if [ ! -f "$draft" ] && [ -f "$ADR_TEMPLATE" ]; then
+			# Auto-generate the draft from the template.
+			# Pull the most recent JSONL entry for this host for context.
+			first_entry=$(grep -F "\"domain\":\"$host\"" "$DISCOVERED_LOG" 2>/dev/null | tail -1)
+			first_url=$(printf '%s' "$first_entry" | jq -r '.ref_url')
+			first_quote=$(printf '%s' "$first_entry" | jq -r '.trend_context_quote')
+			first_ts=$(printf '%s' "$first_entry" | jq -r '.ts')
+			sed \
+				-e "s|__HOSTNAME__|$host|g" \
+				-e "s|__URL__|$first_url|g" \
+				-e "s|__TREND_QUOTE__|$first_quote|g" \
+				-e "s|__RECOMMENDED_AUTHORITY_WEIGHT__|3|g" \
+				-e "s|__RECOMMENDED_ID__|$slug|g" \
+				-e "s|__GENERATED_AT__|$(date -u +%Y-%m-%dT%H:%M:%SZ)|g" \
+				-e "s|__AUDIT_DATE__|${audit_id:0:8}|g" \
+				-e "s|__AUDIT_ID__|$audit_id|g" \
+				"$ADR_TEMPLATE" >"$draft"
+			generated_drafts+=("$host -> $draft (count=$count crossed threshold=$DISCOVERY_THRESHOLD)")
+		fi
+	fi
+	counted_for_host["$host"]=1
+done <"$DISCOVERED_LOG"
+
+if [ "${#generated_drafts[@]}" -gt 0 ]; then
 	{
-		printf 'FR-7: %d new-domain hostname(s) in Trend findings lack a paired draft ADR:\n' "${#missing_drafts[@]}"
-		for entry in "${missing_drafts[@]}"; do
+		printf 'FR-7 (v6.0 accumulation): %d new-domain hostname(s) crossed threshold; draft ADRs auto-generated for maintainer review:\n' "${#generated_drafts[@]}"
+		for entry in "${generated_drafts[@]}"; do
 			printf '  - %s\n' "$entry"
 		done
-		printf 'Generate via plugins/agentify/templates/lifecycle/add-source-adr.md.template\n'
+		printf 'Drafts live under decisions/drafts/. Review and either move to decisions/<NNNN>-...md (accept) or delete (reject).\n'
 	} >&2
 	exit 1
 fi
