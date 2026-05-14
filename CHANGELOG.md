@@ -15,6 +15,62 @@ Commits since the most recent `vX.Y.Z` tag; do not edit manually
 unless you intend to override the auto-derivation (and add an explicit
 note here saying so)._
 
+## [agentify 5.0.0] — 2026-05-14
+
+This is the v4.4.0 → v5.0.0 BREAKING release. See
+`plugins/agentify/migrations/v4.4.0-to-v5.0.0.md` for the operator
+walkthrough; full requirements + acceptance criteria live in
+`prds/0003-skill-enforcement-gates-structural-enforcement-o/`.
+
+The release encodes the failure modes the 2026-05-14 audit surfaced
+(`audits/20260514T132640Z.md`) as runtime gates — moving the project's
+discipline from "SKILL.md prose says so" to "the runtime refuses
+otherwise". Motivated by a session where `/mkt-self-improve` ran 1
+WebFetch in Phase 4, the lifecycle skills one-shot back-to-back, and
+6 commits landed direct on main despite the project's PR-based
+history.
+
+### Added (PRD 0003 enforcement gates)
+
+- **gates**: `plugins/agentify/lib/block-push-to-main.sh` — PreToolUse
+  hook that refuses every form of `git push` targeting `origin/main`.
+  Wired via `plugins/agentify/hooks/hooks.json` under PreToolUse > Bash
+  with the broad-matcher workaround for anthropics/claude-code#36389.
+- **gates**: `plugins/agentify/lib/mkt_self_improve_postflight.sh` —
+  substantive-research postflight. Enforces FR-2 (`## Trend findings`
+  heading with ≥3 named patterns + adoption status), FR-3 (dynamic
+  references[] threshold), FR-4 (re-fetch verification of a 20% sample),
+  FR-5 (≥5 distinct hostnames, ≥2 outside curated lists), FR-7 (paired
+  draft ADR for every new-domain hostname).
+- **gates**: `plugins/agentify/lib/agt_prd_preflight.sh`,
+  `agt_plan_preflight.sh`, `agt_tasks_preflight.sh` plus the shared
+  `session_interaction_check.sh` — lifecycle-interaction preflights.
+  Refuse `task_backend prd_create` / `plan_create` / `task_create`
+  unless `--user-reviewed=<sha256>` matches the draft body sha OR the
+  active session transcript shows an `AskUserQuestion`/user message
+  after the draft mtime (FR-6).
+- **gates**: `plugins/agentify/templates/lifecycle/add-source-adr.md.template`
+  — drives FR-7 auto-generated draft ADRs.
+- **gates**: `decisions/drafts/` directory (with `draft-*.md` gitignored)
+  — staging for FR-7 ADR drafts pending maintainer review.
+- **tests**: 31 new bats tests across `tests/hook-push-to-main-blocked.bats`,
+  `tests/postflight-gates.bats`, `tests/skill-gate-wiring.bats`.
+
+### Changed
+
+- **SKILL.md prose** for `mkt-self-improve`, `agt-prd`, `agt-plan`,
+  `agt-tasks` each now mandates the corresponding wrapper-script
+  invocation. The bats `tests/skill-gate-wiring.bats` asserts the
+  invocation is present on a non-comment line.
+
+### Breaking
+
+- All gates are **hard refusal**. No override flag, no opt-out env var.
+  Headless automation must adopt the `--user-reviewed=<sha>` flag pattern
+  documented in the migration.
+- Direct `git push origin main` from the agent's Bash tool is refused
+  at the tool layer. Maintainers must use feature-branch + `gh pr merge`.
+
 ## [agentify 4.4.0] — 2026-05-13
 
 This is the v4.3.0 → v4.4.0 release. See

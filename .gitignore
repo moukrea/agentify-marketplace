@@ -15,3 +15,9 @@ plugins/agentify/practices/raw/
 
 # task_backend file-driver lock files (atomicity helper; never tracked).
 prds/INDEX.json.lock
+
+# /mkt-self-improve FR-7: auto-generated ADR drafts proposing new sources.yaml
+# additions. Drafts live under decisions/drafts/draft-add-source-<host>.md;
+# they move to decisions/<NNNN>-<slug>.md after maintainer review. The drafts
+# themselves are not tracked — only the kept directory is, via .gitkeep.
+decisions/drafts/draft-*.md

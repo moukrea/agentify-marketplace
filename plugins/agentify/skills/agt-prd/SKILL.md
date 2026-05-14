@@ -36,6 +36,34 @@ Uses `plugins/agentify/templates/lifecycle/prd.md.template`:
   — a check a human or CI can actually run. "Looks good" is not a
   criterion.
 
+## Preflight (mandatory, hard refusal — PRD 0003 FR-6)
+
+Before `task_backend prd_create`, the skill MUST prove user interaction
+over the draft body. Two paths satisfy the gate, EITHER is sufficient:
+
+1. **Structured choice path** — invoke `AskUserQuestion` (or its equivalent
+   in the harness) to surface the draft and collect approval, THEN compute
+   `draft_sha=$(sha256sum <body-file> | cut -d' ' -f1)` and pass it as
+   `--user-reviewed=$draft_sha`.
+2. **Freeform review path** — print the draft to the user, wait for their
+   freeform reply, then compute the sha and pass `--user-reviewed=$draft_sha`.
+
+In both paths the actual gate is the sha-flag — its presence + value-match
+proves the model has reached the post-interaction point. The fallback path
+is a transcript-parse for an `AskUserQuestion` call or user message that
+post-dates the draft mtime; that catches the case where the model forgot
+to compute the sha.
+
+Invocation pattern:
+
+```bash
+bash plugins/agentify/lib/agt_prd_preflight.sh "$body_file" --user-reviewed="$draft_sha" \
+  || { echo "preflight refused; not persisting"; exit 1; }
+bash plugins/agentify/lib/task_backend.sh prd_create "$title" "$body_file"
+```
+
+There is no override flag and no opt-out env var. Hard refusal.
+
 ## Storage
 
 Calls `task_backend prd_create <title> <body-file>`. Returns the ref.
