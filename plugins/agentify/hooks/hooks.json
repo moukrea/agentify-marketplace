@@ -29,6 +29,11 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/conventional-commit.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/lib/block-push-to-main.sh",
+            "timeout": 10
           }
         ]
       }
