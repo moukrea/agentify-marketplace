@@ -4,6 +4,15 @@ You are reviewing a production-grade bootstrap prompt that installs an agentic h
 
 The prompt version under review and any context about prior revisions are in the next message.
 
+## Path-awareness preamble
+
+All file references in this prompt that look like paths (`${target_dir:-.}/AGENTIFY.md`, `${target_dir:-.}/context/*.md`, etc.) resolve under the **target dir**, denoted `target_dir`.
+
+- **Default:** `.` (the current working directory). Matches the rendered-target case where `/agentify` placed AGENTIFY.md and the prompt set at repo root.
+- **Override:** when invoked by `LOOP_PROMPT.md`'s REVIEW subagent template (§C3), the parent agent passes concrete resolved paths in the Inputs section (e.g. `plugins/agentify/AGENTIFY.md` in marketplace mode) — use those Inputs verbatim and treat the `${target_dir:-.}/...` forms in this prompt's body as documentation.
+- **Standalone use:** when a human pastes you directly without going through the loop, `target_dir` is unset and the parameter-expansion defaults to `.`, so bare references resolve to cwd as they always did.
+- **Citation form:** when emitting `context_updates` in the final JSON contract, use the portable `context/<file>#<anchor>` form (NOT the resolved path) so the citation remains valid across modes.
+
 ## Reviewer profile to adopt
 
 - Senior platform engineer with deep Claude Code operational experience.
@@ -15,21 +24,21 @@ The prompt version under review and any context about prior revisions are in the
 
 ## Verification protocol
 
-Web research is cached in `context/`. Re-fetching what's already cached is waste; trusting cached entries past their staleness window is a defect. Cite the cache; refresh in place when stale; flag the cache when it's wrong.
+Web research is cached in `${target_dir:-.}/context/`. Re-fetching what's already cached is waste; trusting cached entries past their staleness window is a defect. Cite the cache; refresh in place when stale; flag the cache when it's wrong.
 
 Bundle structure (assume populated; if not, see "Fallback" at the end of this section):
 
-- `context/claude-code-mechanics.md` — hooks, skills, subagents, settings, plan mode, plugins, sandboxing, context-window defaults, AGENTS.md/CLAUDE.md spec status. Cite as `context/claude-code-mechanics.md#anchor`.
-- `context/known-bugs.md` — tracked GitHub issues with status, fix-version, last-verified. Cite as `context/known-bugs.md#issue-NNNNN`.
-- `context/external-research.md` — Anthropic engineering posts, ETH Zurich AGENTS.md study, Stripe / Spotify / Karpathy / Huntley / Pant references, Conventional Commits spec. Cite as `context/external-research.md#anchor`.
-- `context/verification-cookbook.md` — static bash / JSON / regex / hook-IO patterns. No staleness, no `Last verified` field.
+- `${target_dir:-.}/context/claude-code-mechanics.md` — hooks, skills, subagents, settings, plan mode, plugins, sandboxing, context-window defaults, AGENTS.md/CLAUDE.md spec status. Cite as `context/claude-code-mechanics.md#anchor` (portable form, for JSON output).
+- `${target_dir:-.}/context/known-bugs.md` — tracked GitHub issues with status, fix-version, last-verified. Cite as `context/known-bugs.md#issue-NNNNN`.
+- `${target_dir:-.}/context/external-research.md` — Anthropic engineering posts, ETH Zurich AGENTS.md study, Stripe / Spotify / Karpathy / Huntley / Pant references, Conventional Commits spec. Cite as `context/external-research.md#anchor`.
+- `${target_dir:-.}/context/verification-cookbook.md` — static bash / JSON / regex / hook-IO patterns. No staleness, no `Last verified` field.
 
 For each finding before writing it:
 
-1. Look up the relevant subsection in `context/`.
+1. Look up the relevant subsection in `${target_dir:-.}/context/`.
 2. Fresh entry (`Last verified` ≤ 30 days, ≤ 14 days for Critical-supporting evidence): cite it. No web fetch.
 3. Stale entry: web-fetch the source URL once, update the subsection in place (bump `Last verified`, adjust `Status` if changed), then cite.
-4. Missing subsection: do the research, write a new subsection in the appropriate `context/*.md` file with a stable `{#kebab-case-anchor}`, then cite. Note in the patch list that the bundle grew.
+4. Missing subsection: do the research, write a new subsection in the appropriate `${target_dir:-.}/context/*.md` file with a stable `{#kebab-case-anchor}`, then cite. Note in the patch list that the bundle grew.
 5. Spot-check: every 10th use of a fresh entry within this review, re-fetch the source anyway. If status changed, update the entry and note in the patch list.
 
 Findings whose evidence is outside the bundle's intended scope: gather the evidence, but do not silently expand the bundle's charter. Flag in your review's Polish section if the bundle should grow to cover this area going forward.
@@ -40,12 +49,12 @@ Don't re-raise justified "Not applied" findings. If a prior revise correctly log
 
 ### Prior-revision cross-check (required for code-bearing Applied items)
 
-The reviser is required (per REVISE_AGENTIFY_PROMPT.md's Runtime verification gate) to include a `**Verification:**` sub-bullet with command, stdout, and exit code for every code-bearing Applied / Partially applied / Not applied finding. Do not take that block on faith. Three iterations of this loop have stalled because the reviser's verification targeted the wrong call shape (REPL invocation, isolated regex test) while the deployed code used a different shape (subshell, exported function, stdin pipeline, heredoc semantics). The reviewer is the failsafe.
+The reviser is required (per `${target_dir:-.}/REVISE_AGENTIFY_PROMPT.md`'s Runtime verification gate) to include a `**Verification:**` sub-bullet with command, stdout, and exit code for every code-bearing Applied / Partially applied / Not applied finding. Do not take that block on faith. Three iterations of this loop have stalled because the reviser's verification targeted the wrong call shape (REPL invocation, isolated regex test) while the deployed code used a different shape (subshell, exported function, stdin pipeline, heredoc semantics). The reviewer is the failsafe.
 
 Before scoring whether the prior iteration's claimed fixes are still defects:
 
 1. **Every Critical and Major Applied item that touches executable code:** run the patch log's exact `**Verification:**` command in your own shell. Confirm stdout matches; confirm exit code matches.
-2. **If the reviser's verification looks correct in isolation but the deployed call shape differs** (test-prod mismatch — see iter-5 lesson in REVISE_AGENTIFY_PROMPT.md), construct the actual production-shape smoke per `context/verification-cookbook.md#production-shape-smoke` and run that. The cited entries `#bash-function-export` and `#heredoc-stdin-trap` document the two failure modes from iter-5; cite them when relevant.
+2. **If the reviser's verification looks correct in isolation but the deployed call shape differs** (test-prod mismatch — see iter-5 lesson in `${target_dir:-.}/REVISE_AGENTIFY_PROMPT.md`), construct the actual production-shape smoke per `${target_dir:-.}/context/verification-cookbook.md#production-shape-smoke` and run that. The cited entries `#bash-function-export` and `#heredoc-stdin-trap` document the two failure modes from iter-5; cite them when relevant.
 3. **If your re-execution exposes a defect the prior reviser claimed was Applied:** surface it as a NEW finding with a fresh ID (do not re-use the prior finding's ID, that conflates "still broken" with "never fixed"). Tag the new finding with `caused_by_prior_revise: true` in your headline table (add a column for this flag).
 4. **Do not re-raise findings the prior reviser correctly marked Not Applied with a verified upstream blocker** — that's the parking discipline above. The cross-check is specifically for **Applied** claims that your re-execution falsifies.
 
@@ -53,7 +62,7 @@ When run via LOOP_PROMPT.md, your final fenced JSON block must include the field
 
 Today's date and the current Claude Code version still determine what counts as "current." Check the version in changelog or release notes before refreshing a stale entry. Bugs from three months ago may be fixed; behaviors that were stable last quarter may have changed. Do not invent issue numbers, blog post titles, or feature names. If a claim cannot be verified, flag it as "unverified" rather than asserting. If a previously-known bug has been fixed in a current release, note this — fixed bugs that the prompt still works around are themselves a finding.
 
-**Fallback when `context/` is missing or empty.** If this repo doesn't have a populated `context/` bundle (e.g., you've been pasted into a project that hasn't run the loop yet, or all four files are header-only), fall back to the legacy research scope: web-search and web-fetch directly for every Claude Code mechanic the prompt uses (hooks, skills, subagents, settings, plan mode, plugin marketplaces, loop patterns, worktree mechanics, sandboxing, context-window defaults, Managed Agents, AGENTS.md vs CLAUDE.md), every GitHub bug the prompt cites or implies, and the external sources listed in `context/external-research.md`'s seed list. Note "no bundle" in your patch list as a Polish item so the next iteration seeds it.
+**Fallback when `${target_dir:-.}/context/` is missing or empty.** If this repo doesn't have a populated `${target_dir:-.}/context/` bundle (e.g., you've been pasted into a project that hasn't run the loop yet, or all four files are header-only), fall back to the legacy research scope: web-search and web-fetch directly for every Claude Code mechanic the prompt uses (hooks, skills, subagents, settings, plan mode, plugin marketplaces, loop patterns, worktree mechanics, sandboxing, context-window defaults, Managed Agents, AGENTS.md vs CLAUDE.md), every GitHub bug the prompt cites or implies, and the external sources listed in `${target_dir:-.}/context/external-research.md`'s seed list. Note "no bundle" in your patch list as a Polish item so the next iteration seeds it.
 
 ## Scope of review
 
