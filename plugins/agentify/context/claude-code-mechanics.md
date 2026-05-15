@@ -528,6 +528,34 @@ Multi-line: emit `\n` to render stacked lines. The `statusline-setup` bundled ag
 
 ---
 
+## /cost — alias for /usage; per-session cost readout {#cost}
+
+**Source:** https://code.claude.com/docs/en/commands (fetched 2026-05-15) + https://code.claude.com/docs/en/costs (fetched 2026-05-15)
+**Last verified:** 2026-05-15 (live fetch this iteration)
+**Status:** Stable. `/cost` is documented as an alias for `/usage` (canonical name).
+
+`/cost` is an alias for `/usage` and `/stats`. The canonical command is `/usage` per the live commands reference. Invocation is interactive only at session level; the documented output shape is **human-readable text**, NOT JSON. Verified output format from the docs:
+
+```text
+Total cost:            $0.55
+Total duration (API):  6m 19.7s
+Total duration (wall): 6h 33m 10.2s
+Total code changes:    0 lines added, 0 lines removed
+```
+
+The dollar figure is **estimated locally** from token counts and may differ from the actual bill. Authoritative billing data lives in the Claude Console "Usage" page (https://platform.claude.com/usage). For Claude Max / Pro subscribers, usage is included in the subscription and the session cost figure is informational, not billed.
+
+Open verification items resolved this iteration (closes review 02 S3 + P6):
+
+1. **`/cost` in `/en/commands`** — Verified. Listed as `Alias for /usage` in the canonical commands reference. The statusline `cost.total_cost_usd` payload field is the same data source surfaced through a different interface.
+2. **`--print "/cost"` output shape** — Verified human-readable text per the costs-guide sample block. AGENTIFY's `/{__AGT_SKILL_PREFIX__}-budget` skill parses the four labeled lines ("Total cost: $X", "Total duration (API): ...", "Total duration (wall): ...", "Total code changes: ...") rather than relying on JSON keys. Update §7.5 / `/{__AGT_SKILL_PREFIX__}-budget` parser accordingly when implementing — the prior assumption of "JSON readout with `cache_creation_input_tokens` etc." was inferred from the statusline payload, not from `/cost` itself.
+3. **Field names** — Documented `/usage` output covers `Total cost` (USD), `Total duration (API)`, `Total duration (wall)`, and `Total code changes` (lines added/removed). Token-level fields (`input_tokens`, `output_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`) are **not documented as `/cost` output**; those are Anthropic Admin API fields used in the fleet-level aggregator (§7.5 caching note). The harness should fetch cache-hit-rate metrics from the Admin API endpoint, not from `/cost`.
+4. **`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`** — Not explicitly documented as affecting `/usage`. The cost figure is computed locally from token counts already in the session, so the readout itself should work air-gapped. What air-gap mode disables is the Admin API aggregator path (network call), not the per-session local readout. AGENTIFY's `/{__AGT_SKILL_PREFIX__}-budget` description framing is correct: "air-gap mode disables aggregated metrics" (fleet-level), not the local `/cost` per-session readout.
+
+AGENTIFY's `/{__AGT_SKILL_PREFIX__}-budget` skill reads `claude --print "/cost"` (or `/usage`) for the per-session local readout (parses human-text lines) and the Claude Admin API aggregator for fleet-level totals. The previous folklore reference to `~/.claude/usage.json` was already removed per review 01 (the file is not in the documented schema).
+
+---
+
 ## /fast — Opus 4.6 / 4.7 high-speed configuration {#fast-mode}
 
 **Source:** https://code.claude.com/docs/en/fast-mode (fetched 2026-05-14)
