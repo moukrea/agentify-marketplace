@@ -669,3 +669,45 @@ The Agent SDK is Anthropic's library for building agentic applications outside t
 Adjacent agentify-relevant doc paths in the 30-doc agent-sdk section: `agent-sdk/agent-loop`, `agent-sdk/hooks`, `agent-sdk/permissions`, `agent-sdk/sessions`, `agent-sdk/skills`, `agent-sdk/slash-commands`, `agent-sdk/subagents`, `agent-sdk/todo-tracking`, `agent-sdk/tool-search`, `agent-sdk/structured-outputs`. The harness's revise/review loop is conceptually an Agent SDK shape implemented via the CLI's `Bash` + `Edit` + `Agent` tools rather than via the SDK directly.
 
 Not currently consumed by `/agt-*` skills (they orchestrate the CLI from the inside), but a future fleet-bootstrap could ship an Agent SDK harness variant for tenants who want the harness as a library rather than as a plugin.
+
+---
+
+## Loop coexistence — /agt-loop, bundled /loop, /goal are orthogonal {#loop-coexistence}
+
+**Source:** synthesis of the three preceding subsections + audit `20260514T203350Z` F-008 retraction record
+**Last verified:** 2026-05-15
+**Status:** Stable
+
+The three Claude Code constructs that carry "loop"-shaped naming are
+**not interchangeable**. The agentify audit at `20260514T203350Z`
+shipped a first-pass finding (F-005, retracted) claiming `/agt-loop`
+overlaps with bundled `/loop` and `CronCreate`/`CronList`/
+`CronDelete`. That claim was wrong. This subsection exists to prevent
+the same mistake in future audits.
+
+| Construct | Shape | What it does | What it cannot do |
+| :-- | :-- | :-- | :-- |
+| `/agt-loop` (`.claude/skills/agt-loop/SKILL.md`) | **Workflow engine** | Drives `LOOP_PROMPT.md` end-to-end: spawns fresh-context REVISE + REVIEW subagents per iteration via `Agent` tool; maintains state at `${state_root}/loop-state.json` (`iteration`, `max_iterations`, `last_verdict`, `last_counts`, `prev_counts`, `no_progress_streak`, `regression_streak`, `agentify_md_sha`, `latest_revision_path`, `latest_review_path`, `parked_findings`); detects convergence (DONE / PARKED / STALLED / BUDGET_EXHAUSTED / REGRESSION / FAILURE / SUBAGENT_FAILURE per `LOOP_PROMPT.md` §C7); AUTO-SEEDs unseeded context bundles; enforces a dirty-tree gate tied to `AGENTIFY.md` sha. | Not a scheduler. Does not fire on a wall-clock interval. Cannot be ported to `.claude/loop.md` (`LOOP_PROMPT.md` is 27,580 bytes, over the 25,000-byte body cap). |
+| Bundled `/loop` (see [#scheduled-tasks](#scheduled-tasks)) | **Polling scheduler** | Re-runs a prompt on a cron expression (`5m`, `/loop 5m <prompt>`) OR dynamic interval (Claude picks 1m–1h) OR built-in maintenance prompt OR `.claude/loop.md`. 7-day recurring expiry. Tasks visible via `CronList`; cancelable via `CronDelete`. Pairs with `Channels` for event-driven push. | No subagents. No state model beyond the cron schedule. No verdict tracking, no convergence detection, no AUTO-SEED, no dirty-tree gate. |
+| `/goal` (see [#goal](#goal)) | **Per-turn condition evaluator** | Session-scoped wrapper around a prompt-based Stop hook. After each parent turn, the small fast model (default Haiku) evaluates the condition against the transcript and returns yes/no plus a short reason. Active until condition holds OR `/goal clear`. Restored on `--resume`. | Does not spawn subagents. Does not produce structured audit JSON. Does not track findings, severity counts, or trends. Cannot replace `/agt-loop`'s REVIEW phase. |
+
+**Composition opportunities** (not replacements):
+
+- Bundled `/loop 24h /agt-loop start` schedules a daily run of the
+  agentify workflow engine. Useful for unattended weekly self-improve
+  cycles where the parent session keeps state between iterations.
+- `/goal "${state_root}/loop-state.json's last_verdict == 'ship'"`
+  inside `/agt-loop`'s parent orchestrator replaces the inline
+  exit-condition check with a model-evaluated gate. Polish-level
+  enhancement; see audit `20260514T203350Z` F-006 (reframed).
+- `Channels` push events from CI / deploy / monitoring into a live
+  `/agt-loop` session, replacing polling with event-driven iteration
+  triggers.
+
+**Decision shape for future audits:** before filing any practice-drift
+finding proposing retirement or replacement of `/agt-loop` (or any
+plugin internal), READ the cited file (`LOOP_PROMPT.md`,
+`SKILL.md`, hooks, lib scripts) and quote a load-bearing line in the
+finding's `references[].quote` field. Naming similarity is not
+evidence; mechanism is. (See audit `20260514T203350Z` F-008 for the
+procedural FR-8 gate proposal.)
