@@ -104,9 +104,21 @@ When it runs in a scaffolded target, it audits the rendered harness
 config) and writes to that target's `<path_root>/audits/`. Same
 skill, two contexts, distinct audit lineages.
 
-We are NOT proposing to merge `/mkt-decide` and `/agt-decide`,
-collapse the lifecycle skills, or demote `/agt-charter`. Those are
-separable concerns and should be evaluated independently.
+This ADR is scoped to the audit-lineage split. The broader command-
+sprawl discussion that surfaced in issue #17 (`/mkt-audit-trend` as
+lib-only; `/mkt-practice-evolve` as a phase rather than a standalone
+skill; `/mkt-decide` + `/agt-decide` as one auto-routing skill;
+`/agt-clarify` as a `/agt-prd --clarify` flag; `/agt-tasks` as a
+`/agt-plan --produce-tasks` flag) is **related follow-up work**, not
+covered by this decision. Each sprawl candidate is a separable
+decision that can land incrementally after the audit-lineage split.
+
+The lifecycle skill family as a whole stays intact — interactivity
+between phases is the point, per `feedback_lifecycle-interactive` in
+the project memory. Only the two specific sub-flag opportunities
+(`/agt-clarify`, `/agt-tasks`) are surfaced as merge candidates;
+`/agt-charter` / `/agt-brainstorm` / `/agt-prd` / `/agt-plan` /
+`/agt-implement` are NOT.
 
 ## Consequences
 
@@ -158,6 +170,25 @@ Follow-up work this decision creates:
   (`plugins/agentify/lib/audit_postflight_common.sh` or similar).
 - The FR-8 gate from audit `20260514T203350Z` F-008 lands in the
   shared lib and applies to plugin-product audits.
+
+Related but separable work (tracked in issue #17, not covered by
+this ADR — each lands as its own PR/ADR if accepted):
+
+- Demote `/mkt-audit-trend` from slash skill to lib-only invocation
+  (`audit_aggregate.sh` already exists; the slash wrapper has no
+  standalone operator use case).
+- Once `/mkt-practice-evolve` moves under `/agt-self-improve`'s
+  practice phase (this ADR), evaluate whether the standalone slash
+  command is still warranted or should be deprecated.
+- Merge `/mkt-decide` + `/agt-decide` into auto-routing `/decide`
+  that picks `decisions/` vs `<path_root>/adrs/` based on cwd
+  context.
+- Evaluate `/agt-clarify` as `/agt-prd --clarify` flag.
+- Evaluate `/agt-tasks` as `/agt-plan --produce-tasks` flag.
+
+These do not block this ADR. The audit-lineage split is the
+load-bearing structural change; sprawl candidates are
+quality-of-operator-experience improvements that compose with it.
 
 ## Alternatives Considered
 
@@ -216,4 +247,4 @@ Follow-up work this decision creates:
   — the discovery-accumulation gate that produced
   `discovered-sources.jsonl`; that mechanism is plugin-product-scoped
   and should be owned by `/agt-self-improve`.
-- Companion feedback issue — TBD (issue URL captured when opened).
+- Companion feedback issue [#17](https://github.com/moukrea/agentify-marketplace/issues/17) — captures the four concerns (scope conflation, no plugin lineage, phantom dispatch, bad audit signal) plus the broader command-sprawl candidates (`/mkt-audit-trend`, `/mkt-practice-evolve`, `/mkt-decide`+`/agt-decide`, `/agt-clarify`, `/agt-tasks`) that compose with but do NOT block this ADR.
