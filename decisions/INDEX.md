@@ -18,6 +18,7 @@ durable commitments.
 | [0008](./0008-fleet-marketplace-bootstrap.md)         | fleet marketplace bootstrap                | accepted | 2026-05-12 |
 | [0009](./0009-marketplace-self-dogfooding.md)         | marketplace self-dogfooding                | accepted | 2026-05-12 |
 | [0010](./0010-fix-pass-discipline.md)                 | fix-pass discipline (regression-bats rule) | adopted  | 2026-05-13 |
+| [0011](./0011-separate-plugin-product-audit.md)       | separate plugin-product audit from marketplace-package audit | proposed | 2026-05-15 |
 
 ## Authoring
 
