@@ -401,10 +401,12 @@ For each `confirmed-local` candidate from passes 1–6, the **main agent** spawn
 **Parallelism cap (N=10 in-flight).** Closes review 01 Mo7. Sort candidates first, batch into groups of ≤10, await each batch before spawning the next. A 100-sibling fleet without the cap triggers 100 concurrent Haiku subagents and burns the daily budget on first agentification. The cap also stays under `context/claude-code-mechanics.md#scheduled-tasks`'s 50-task-per-session ceiling with safety margin. Reference pattern below — **not bash**: the `spawn_batch` operation is a *model action*, not a shell function. The main agent calls the `Task` tool (the orchestrator-worker primitive) once per candidate in the batch, then awaits all in-flight Task results before reading the next batch. An engineer reading this and pasting it into a terminal will hit "command not found: spawn_batch"; the fence is `text` (not `bash`) to make the model-orchestration framing explicit (closes review 02 Mo3):
 
 ```text
+# Python-shape pseudo-code; the main agent translates to its Task tool calls.
 # Model orchestration; main agent's planning body, not bash.
 # `spawn_batch(args...)` reads as "call the Task tool once per arg in parallel,
 # then await every in-flight Task result before continuing". The main agent
 # decides which subagent prompt to dispatch (sibling-scout in this case).
+# Note: list literal is `BATCH = []` (Python), NOT `BATCH=()` (bash). Closes review 03 P3.
 N=0
 BATCH=[]
 for c in CANDIDATES:
@@ -654,7 +656,7 @@ Seed:
 - `acc-harness-evals`: `.agents-work/evals/replay.sh` produces zero-diff against golden fixtures
 - `acc-xrepo-map`: `related-repos.json` validates (schema v2) and each non-null `local_path` is reachable
 - `acc-plansdir-smoke`: `.agents-work/plans/` contains at least one captured plan whose mtime matches a capture-hook execution
-- `acc-bootstrap-verify-runner`: `scripts/verify-bootstrap.sh` runs all 40 §8 checks (30 numbered + 14b/14c managed-lockdown gates + 14d guard-bash smoke + 14e sweep-plans smoke + 14f approve-drift detector + 24b Stop-model registration + 31b pivot-fail-closed + 32/33/34 anti-pattern gaps) and emits the §13 table
+- `acc-bootstrap-verify-runner`: `scripts/verify-bootstrap.sh` runs all 41 §8 checks (30 numbered + 14b/14c managed-lockdown gates + 14d guard-bash smoke + 14e sweep-plans smoke + 14f approve-drift detector + 24b Stop-model registration + 31b pivot-fail-closed + 32/33/34 anti-pattern gaps + 35 count-consistency) and emits the §13 table
 - Plus repo-specific items extracted from discovery
 
 **`.agents-work/progress.md`** — chronological session log, newest on top. Schema-stable enough that we treat it as **structured Markdown**; `/{__AGT_SKILL_PREFIX__}-handoff` is the only writer. Long sessions can append mid-session checkpoints via `/{__AGT_SKILL_PREFIX__}-handoff --checkpoint` to bound loss on session crash.
@@ -1294,7 +1296,7 @@ Subagents cannot spawn other subagents. Foreground subagents *can* pass `AskUser
 
 ### 5.8 Scripts
 
-**`scripts/init.sh`** — idempotent bootstrap. On Darwin, prints the macOS workaround notice for #29013 (`context/known-bugs.md#issue-29013`). Installs the `prepare-commit-msg` git hook for editor-mode commits. Checks for `column` (used by `xrepo.sh`) and prints a per-OS hint when missing: `apk add util-linux` (Alpine), `apt-get install bsdmainutils` (Debian/Ubuntu), `brew install util-linux` (macOS). Checks for `python3` (used by `_lib.sh#file_mtime`, `_lib.sh#resolve_path` fallback, and the §12.5 `redact_prose` redactor) and prints a non-blocking warning when missing: `command -v python3 >/dev/null || echo "warn: python3 required for hooks/eval (M1 file_mtime, §12.5 redactor, §12.19 _lib.sh resolve_path fallback)"`. Closes review 01 Polish #12. Seeds `.agents-work/evals/checks/01.sh`–`30.sh` plus `14b.sh` / `14c.sh` / `14d.sh` / `14e.sh` / `14f.sh` / `24b.sh` / `31b.sh` / `32.sh` / `33.sh` / `34.sh` helpers (40 helpers total: 30 numbered + 10 sub-checks — enumerated 14b/14c/14d/14e/14f/24b/31b/32/33/34, no double-counting; review 02 M2 + P2 close the v6.1 arithmetic drift that triple-counted #24b) so `verify-bootstrap.sh` does not abort on first run; stub helpers emit their check headline on the first line and exit 0 with status SKIP, while real helpers (`14d`, `14e`, `14f`, `24b`) ship production verification logic on first install. The two `14b/14c` stubs include the OS-detected managed-settings precondition gate so they auto-classify as SKIP unless `allowManagedPermissionRulesOnly: true` is active. The `14d` real helper follows the §12.3 helper template (pipes synthetic JSON for every documented dangerous pattern through the actual `guard-bash.sh` and asserts exit 2; now also covers all three fork-bomb whitespace variants per review 01 Mo5). The `14e` real helper creates a tmpfile in `~/.claude/plans/`, runs `sweep-plans.sh`, and asserts the file appeared under `.agents-work/plans/`. The `14f` real helper follows the §8 #14f template (greps AGENTIFY.md for documented `approve`-shape outside anti-pattern citations and asserts zero matches). The `24b` real helper greps `claude --print "/hooks"` for the Stop block plus `model:haiku` registration (closes review 01 Mo2 — was a stub in v6.0, ships as production verification in v6.1). The `31b` stub exercises the pivot-fail-closed regression check (rename dispatch script, assert exit 2 from `agent-bash-pivot.sh`; closes review 01 Mo6). The `32` / `33` / `34` stubs cover the §10 anti-pattern gaps for `additionalContext` on Stop, `--add-dir` write semantics, and unanchored `Read/Edit/Write(*)` allows (closes review 01 S4). Seeds `documentation/runbooks/onboarding.md` from the §12.26 template with TODO markers for marketplace URL and break-glass owner. Seeds `documentation/decisions/0000-bootstrap-decisions.md` (template at §12.27) so DECISION points from §7.4 land in one canonical artifact rather than scattered across the final message and commit body (closes review 01 Polish #7). Engineers fill in the verification logic incrementally; the runner reports SKIP for unimplemented helpers rather than the runner itself failing. Seed template:
+**`scripts/init.sh`** — idempotent bootstrap. On Darwin, prints the macOS workaround notice for #29013 (`context/known-bugs.md#issue-29013`). Installs the `prepare-commit-msg` git hook for editor-mode commits. Checks for `column` (used by `xrepo.sh`) and prints a per-OS hint when missing: `apk add util-linux` (Alpine), `apt-get install bsdmainutils` (Debian/Ubuntu), `brew install util-linux` (macOS). Checks for `python3` (used by `_lib.sh#file_mtime`, `_lib.sh#resolve_path` fallback, and the §12.5 `redact_prose` redactor) and prints a non-blocking warning when missing: `command -v python3 >/dev/null || echo "warn: python3 required for hooks/eval (M1 file_mtime, §12.5 redactor, §12.19 _lib.sh resolve_path fallback)"`. Closes review 01 Polish #12. Seeds `.agents-work/evals/checks/01.sh`–`30.sh` plus `14b.sh` / `14c.sh` / `14d.sh` / `14e.sh` / `14f.sh` / `24b.sh` / `31b.sh` / `32.sh` / `33.sh` / `34.sh` / `35.sh` helpers (41 helpers total: 30 numbered + 11 sub-checks — enumerated 14b/14c/14d/14e/14f/24b/31b/32/33/34/35, no double-counting; review 03 S1 closes the count-consistency gap with #35) so `verify-bootstrap.sh` does not abort on first run; stub helpers emit their check headline on the first line and exit 0 with status SKIP, while real helpers (`14d`, `14e`, `14f`, `24b`) ship production verification logic on first install. The two `14b/14c` stubs include the OS-detected managed-settings precondition gate so they auto-classify as SKIP unless `allowManagedPermissionRulesOnly: true` is active. The `14d` real helper follows the §12.3 helper template (pipes synthetic JSON for every documented dangerous pattern through the actual `guard-bash.sh` and asserts exit 2; now also covers all three fork-bomb whitespace variants per review 01 Mo5). The `14e` real helper creates a tmpfile in `~/.claude/plans/`, runs `sweep-plans.sh`, and asserts the file appeared under `.agents-work/plans/`. The `14f` real helper follows the §8 #14f template (greps AGENTIFY.md for documented `approve`-shape outside anti-pattern citations and asserts zero matches). The `24b` real helper greps `claude --print "/hooks"` for the Stop block plus `model:haiku` registration (closes review 01 Mo2 — was a stub in v6.0, ships as production verification in v6.1). The `31b` stub exercises the pivot-fail-closed regression check (rename dispatch script, assert exit 2 from `agent-bash-pivot.sh`; closes review 01 Mo6). The `32` / `33` / `34` stubs cover the §10 anti-pattern gaps for `additionalContext` on Stop, `--add-dir` write semantics, and unanchored `Read/Edit/Write(*)` allows (closes review 01 S4). The `35` stub closes review 03 S1 (cross-section count consistency: extracts `HELPER_SLOTS` array length, compares against prose count claims; emits SKIP until engineers tighten the predicate). Seeds `documentation/runbooks/onboarding.md` from the §12.26 template with TODO markers for marketplace URL and break-glass owner. Seeds `documentation/decisions/0000-bootstrap-decisions.md` (template at §12.27) so DECISION points from §7.4 land in one canonical artifact rather than scattered across the final message and commit body (closes review 01 Polish #7). Engineers fill in the verification logic incrementally; the runner reports SKIP for unimplemented helpers rather than the runner itself failing. Seed template:
 
 ```bash
 #!/usr/bin/env bash
@@ -1316,7 +1318,7 @@ exit 0  # SKIP semantics: runner treats stub-emitted output as a SKIP row
 
 **`scripts/onboard.sh`** — once-per-engineer marketplace registration. Drop-in in §12.17.
 
-**`scripts/verify-bootstrap.sh`** — runs all 40 §8 checks (30 numbered + 14b/14c managed-lockdown gates + 14d guard-bash smoke + 14e sweep-plans smoke + 14f approve-drift detector + 24b Stop-model registration + 31b pivot-fail-closed + 32/33/34 anti-pattern gaps) and emits the §13 results table. Drop-in in §12.24.
+**`scripts/verify-bootstrap.sh`** — runs all 41 §8 checks (30 numbered + 14b/14c managed-lockdown gates + 14d guard-bash smoke + 14e sweep-plans smoke + 14f approve-drift detector + 24b Stop-model registration + 31b pivot-fail-closed + 32/33/34 anti-pattern gaps + 35 count-consistency) and emits the §13 results table. Drop-in in §12.24.
 
 **`scripts/fleet-verify.sh`** — **plugin-shipped, not per-repo**. Iterates `permissions.additionalDirectories` plus any colocated agentified siblings, runs `verify-bootstrap.sh` in each, and emits a single fleet-aggregate table. Threshold: **red** if any sibling has `fail_count > 0`; **yellow** if any sibling's `bootstrap-verify.md` mtime is older than 30 days. Wired into the budget-governance dashboard (§7.5, §7.8). Drop-in in §12.25.
 
@@ -1630,7 +1632,7 @@ The harness is a bridge to Anthropic Managed Agents. When parity arrives (~12 mo
 
 1. Removes `.claude/skills/{__AGT_SKILL_PREFIX__}-*/`, `.claude/agents/{sibling-scout,quality-reviewer,tester,committer}.md`, `.claude/hooks/` (project-scope hooks installed by the harness).
 2. Optionally removes `.agents-work/` after archiving `progress.md` and `acceptance.json` to `documentation/handoff/<date>-final.md` so the historical record survives.
-3. Removes `.git/hooks/prepare-commit-msg` if it matches the harness fingerprint. The uninstall regex is the version-tolerant form `^# AGENTIFY prepare-commit-msg v[0-9]` so all three shipped lineages (v3.8, v6.0, v6.1) are caught and removed on the same pass — closes review 02 P4 (the v6.1 prose mentioned only the generic `vN` placeholder and missed enumeration of the three lineages). New lineages added in future iterations need only follow the `# AGENTIFY prepare-commit-msg v<digit>` shape and the uninstall regex catches them automatically.
+3. Removes `.git/hooks/prepare-commit-msg` if it matches the harness fingerprint. The uninstall regex is the version-tolerant form `^# AGENTIFY prepare-commit-msg v[0-9]` so all four internal lineage markers (v3.8, v6.0, v6.1, v6.2) are caught and removed on the same pass — closes review 02 P4 (the v6.1 prose mentioned only the generic `vN` placeholder and missed enumeration of the lineages) and closes review 03 Mo1 (iter-03's internal-iteration bump updated §12.16's enumeration but missed §7.7's; both sites now enumerate the same four markers and future bumps must re-grep both per the §10 count/identifier-drift bullet). v6.1 and v6.2 are loop-internal iteration markers — they have not shipped as released documents (the H1 remains at v6.0; same iteration-vs-release disambiguation as the §10 "v3.7 (not Claude Code version)" pattern); the enumeration carries them so the uninstall regex is forward-compat with any prepare-commit-msg header that future iterations stamped during a development pass. Closes review 04 P3. New lineages added in future iterations need only follow the `# AGENTIFY prepare-commit-msg v<digit>` shape and the uninstall regex catches them automatically.
 4. Removes `MAINTAINERS.md` only if explicitly passed `--remove-maintainers` (it may be hand-maintained).
 5. Prints a Managed-Agents registration guide pointing at the company's deployment runbook.
 
@@ -1638,7 +1640,7 @@ The harness is a bridge to Anthropic Managed Agents. When parity arrives (~12 mo
 
 ### 7.8 Fleet-level verification
 
-`scripts/verify-bootstrap.sh` runs the 40-check matrix (30 numbered + 14b/14c managed-lockdown gates + 14d guard-bash + 14e sweep-plans + 14f approve-drift + 24b Stop-model + 31b pivot-fail-closed + 32/33/34 anti-pattern gaps) per repo. For a {__AGT_FLEET_SIZE__}-engineer fleet with 100+ repos, individual verification produces 100 possibly-stale reports nobody reads. `scripts/fleet-verify.sh` (plugin-shipped, drop-in §12.25) iterates `permissions.additionalDirectories` plus colocated agentified siblings, runs `verify-bootstrap.sh` in each, and emits a single fleet table. Threshold: **red** if any sibling has `fail_count > 0`, **yellow** if any sibling's `bootstrap-verify.md` mtime is older than 30 days. Wired into the budget-governance dashboard from §7.5 as a sibling panel.
+`scripts/verify-bootstrap.sh` runs the 41-check matrix (30 numbered + 14b/14c managed-lockdown gates + 14d guard-bash + 14e sweep-plans + 14f approve-drift + 24b Stop-model + 31b pivot-fail-closed + 32/33/34 anti-pattern gaps + 35 count-consistency) per repo. For a {__AGT_FLEET_SIZE__}-engineer fleet with 100+ repos, individual verification produces 100 possibly-stale reports nobody reads. `scripts/fleet-verify.sh` (plugin-shipped, drop-in §12.25) iterates `permissions.additionalDirectories` plus colocated agentified siblings, runs `verify-bootstrap.sh` in each, and emits a single fleet table. Threshold: **red** if any sibling has `fail_count > 0`, **yellow** if any sibling's `bootstrap-verify.md` mtime is older than 30 days. Wired into the budget-governance dashboard from §7.5 as a sibling panel.
 
 **DECISION**: marketplace location (single repo vs marketplace/plugin split per §7.1), harness ownership team (platform vs application), fleet API spend modeling (per-engineer attribution vs aggregate budget) — three rows in §12.27.
 
@@ -1646,7 +1648,7 @@ The harness is a bridge to Anthropic Managed Agents. When parity arrives (~12 mo
 
 ## 8. Phase 5 — Verification
 
-Not done until each passes. `scripts/verify-bootstrap.sh` (§12.24) runs all of these and emits the §13 table (40 checks: 30 numbered slots 01..30 + 14b + 14c + 14d + 14e + 14f + 24b + 31b + 32 + 33 + 34). The new entries close review 01 Mo2 / Mo6 / S4 (Stop-hook model registration, pivot fail-closed regression, anti-pattern coverage gaps).
+Not done until each passes. `scripts/verify-bootstrap.sh` (§12.24) runs all of these and emits the §13 table (41 checks: 30 numbered slots 01..30 + 14b + 14c + 14d + 14e + 14f + 24b + 31b + 32 + 33 + 34 + 35). The new entries close review 01 Mo2 / Mo6 / S4 (Stop-hook model registration, pivot fail-closed regression, anti-pattern coverage gaps) and review 03 S1 (#35 cross-section count-consistency stub).
 
 1. `scripts/init.sh` exits 0 from a clean state.
 2. `scripts/verify.sh` exits 0 (or clearly indicates pre-existing failures unrelated to the harness, documented in `known-issues.md`).
@@ -1750,7 +1752,7 @@ else
 fi
 ```
 
-14f. **AGENTIFY.md uses the documented Stop allow-shape `{"continue": true}` consistently** <!-- AGENTIFY-CHECK-14F-SELF --> (harness-dev-only check; SKIPs in target repos that don't ship AGENTIFY.md): scans AGENTIFY.md for the deprecated Stop allow-shape outside of anti-pattern citations and asserts zero matches. **In target-repo deployments this check SKIPs by design** — AGENTIFY.md is the bootstrap prompt, consumed once by `init.sh` and not retained in target repos. The check has operational value only in the harness dev/maintainer repo; the SKIP in target repos is the correct outcome, not a misinstall. Closes review 02 strategic gap on cross-section consistency: §8 verifies file behaviors but not that what AGENTIFY.md says in §X matches what AGENTIFY.md says in §Y, and the M-doc-drift cluster from v3.8 (four widely-separated prose lines all carrying the deprecated wording) was the result. The §10 anti-pattern bullet entries (lines starting with `- `) are filtered as a secondary safety net. The helper template itself (which necessarily mentions the deprecated form to detect it) is filtered via the `AGENTIFY-CHECK-14F-SELF` marker so this check does not flag itself when the §8 prose is shipped verbatim alongside the seeded `14f.sh`. A failing match in a future iteration surfaces the same drift class within the bootstrap-verify table rather than waiting for a manual reviewer cross-check. Helper template:
+14f. **AGENTIFY.md uses the documented Stop allow-shape `{"continue": true}` consistently** <!-- AGENTIFY-CHECK-14F-SELF --> (harness-dev-only check; SKIPs in target repos that don't ship AGENTIFY.md): scans AGENTIFY.md for two drift classes outside of anti-pattern citations and asserts zero matches. (a) The deprecated Stop allow-shape (`decision: approve` near anti-pattern bullets) — the original M-doc-drift cluster from v3.8 where four widely-separated prose lines all carried the deprecated wording. (b) The deprecated `approve-on-malformed ... wrapper` framing (closes review 02 S2) — the iter-02 retraction of the orchestrator-side wrapper claim left two cross-section sites (§5.5 #12 and §Acknowledgements) at the deprecated wording until iter-03 closed it. **In target-repo deployments this check SKIPs by design** — AGENTIFY.md is the bootstrap prompt, consumed once by `init.sh` and not retained in target repos. The check has operational value only in the harness dev/maintainer repo; the SKIP in target repos is the correct outcome, not a misinstall. Closes review 02 strategic gap on cross-section consistency: §8 verifies file behaviors but not that what AGENTIFY.md says in §X matches what AGENTIFY.md says in §Y. The §10 anti-pattern bullet entries (lines starting with `- `) are filtered as a secondary safety net. The helper template itself (which necessarily mentions the deprecated form to detect it) is filtered via the `AGENTIFY-CHECK-14F-SELF` marker so this check does not flag itself when the §8 prose is shipped verbatim alongside the seeded `14f.sh`. A failing match in a future iteration surfaces the same drift class within the bootstrap-verify table rather than waiting for a manual reviewer cross-check. Helper template:
 
 ```bash
 #!/usr/bin/env bash
@@ -1759,16 +1761,23 @@ fi
 # AGENTIFY check — production verification ready to deploy. Do not delete as a stub.
 AGENTIFY="${CLAUDE_PROJECT_DIR}/AGENTIFY.md"
 [ -f "$AGENTIFY" ] || { echo "stub: AGENTIFY.md not found; skipping"; exit 0; }
-# AGENTIFY-CHECK-14F-SELF: match the deprecated JSON shape and the deprecated
-# "approve-on-malformed ... wrapper" wording. AGENTIFY-CHECK-14F-SELF
-# The 2nd alternation requires the word `wrapper` within 40 chars after
-# `approve.on.malformed` so harmless documentation phrases like
-# "approve-on-malformed-input fallback" or "approve-on-malformed semantics"
-# no longer trip the regex (closes review 02 S2 — the v6.1 bare
+# Match the deprecated JSON shape and the deprecated "approve-on-malformed ...
+# wrapper" wording. The 2nd alternation requires the word `wrapper` within 40
+# chars after `approve.on.malformed` so harmless documentation phrases like
+# "approve-on-malformed-input fallback" or "approve-on-malformed semantics" no
+# longer trip the regex (closes review 02 S2 — the v6.1 bare
 # `approve-on-malformed` alternation was overbroad). The §10 anti-pattern
 # bullets that legitimately discuss the shape are filtered out by the
-# line-prefix filter (`- ` at column 1 of the markdown) and by the explicit
-# marker AGENTIFY-CHECK-14F-SELF on this scanner's own description and code.
+# line-prefix filter (`- ` at column 1) and the explicit marker on this
+# scanner's own PATTERN and grep -v filter. Marker density: 4 occurrences of
+# the self-marker token in AGENTIFY.md — (a) HTML comment in the §8 #14f
+# headline prose, (b) bash comment in this helper block, (c) inline on the
+# PATTERN line below, (d) inside the `grep -v` filter so the scanner does
+# not flag itself. Closes review 03 P2 (initial reduction; the v3.7 helper
+# carried a 5th occurrence in a redundant grep-self filter) and review 04 P1
+# (verification reconciled — iter-04's `5 → 3` patch-log claim missed that
+# the HTML-prose and bash-comment markers count as two separate `grep -c`
+# hits, not one functional slot; the canonical post-patch density is 4).
 PATTERN='decision[^|]{0,12}approve|approve.on.malformed.{0,40}wrapper' # AGENTIFY-CHECK-14F-SELF
 bad=$(grep -nE "$PATTERN" "$AGENTIFY" \
   | grep -v 'AGENTIFY-CHECK-14F-SELF\|anti-pattern\|Returning.*ok.*true\|context/' \
@@ -1835,6 +1844,29 @@ exit 0
 
 34. **No wide `Read(*)/Edit(*)/Write(*)` allows combined with `acceptEdits`** (closes review 01 S4 anti-pattern gap): greps `.claude/settings.json` and the loop overlay for unanchored `Read(*)` / `Edit(*)` / `Write(*)` patterns. Anchored forms `Read(./**)` / `Edit(./**)` / `Write(./**)` pass; unanchored fail. Combined with `defaultMode: acceptEdits` (the loop overlay), wide allows mean an Edit on an absolute path outside the repo auto-accepts. Asserts zero unanchored matches.
 
+35. **Cross-section count consistency** (closes review 03 S1): extracts the `HELPER_SLOTS` array literal length and compares it against prose count claims ("N §8 checks", "N helpers", "total N") in AGENTIFY.md. Generalizes the §14f cross-section drift detector from approve-shape to count-consistency, which is the Mo1 / review 02 M2 class. Ships as a SKIP-by-default stub so engineers tune the prose tolerance to their fleet's drift threshold before the runner classifies divergences as FAIL. Helper template:
+
+```bash
+#!/usr/bin/env bash
+# 35: cross-section count consistency
+# AGENTIFY check — count drift detector (stub; emits SKIP until tightened).
+AGENTIFY="${CLAUDE_PROJECT_DIR}/AGENTIFY.md"
+[ -f "$AGENTIFY" ] || { echo "stub: AGENTIFY.md not found; skipping"; exit 0; }
+# Extract the array literal length: 30 numbered slots + however many sub-checks
+# the `HELPER_SLOTS+=(...)` line appends. Parses the parenthesised list once.
+ARRAY_LEN=$(awk '/^HELPER_SLOTS\+=\(/{
+  match($0, /\([^)]+\)/); s=substr($0, RSTART+1, RLENGTH-2)
+  n = split(s, _, " "); print 30 + n
+  exit
+}' "$AGENTIFY")
+# Prose count claims: any bare integer N followed by §8|checks|helpers|sub-check.
+PROSE_LEN=$(grep -oE '\b[0-9]+\s+(§8|checks|helpers|sub-check)' "$AGENTIFY" | wc -l)
+# Stub: emits both numbers so the runner classifies as SKIP. Engineers
+# tighten to `[ "$ARRAY_LEN" -eq <prose-claim> ] || exit 1` per fleet policy.
+echo "stub: count-consistency: array=$ARRAY_LEN prose-matches=$PROSE_LEN; tighten predicate to fail on drift"
+exit 0
+```
+
 Write results to `.agents-work/bootstrap-verify.md`, one line per check, pass/fail, with evidence.
 
 ---
@@ -1859,7 +1891,7 @@ Final message:
 
 1. Five-bullet summary, one per reference-architecture part.
 2. Files created/modified, grouped.
-3. Verification results table (40 checks).
+3. Verification results table (41 checks).
 4. Cross-repo map from `xrepo.sh map`.
 5. Three concrete next actions for the human.
 6. Open questions that need a human answer; for §7.4 DECISION points, reference `documentation/decisions/0000-bootstrap-decisions.md` (the canonical register; closes review 01 Polish #7) and list its still-open `<!-- TODO -->` rows.
@@ -1891,7 +1923,7 @@ Final message:
 - **External `claude -p` loop**. Use the in-session Stop hook (Ralph pattern).
 - **Using `pwd` in hooks**. Use `$CLAUDE_PROJECT_DIR`.
 - **Putting the Ralph loop's prompt in `additionalContext` on a Stop hook**. Not a Stop hook field. Use `reason`.
-- **Returning `{"ok": true}` or `{"decision":"approve","reason":"..."}` from a prompt-type Stop hook**. Neither is documented. Use `{"continue": true}` to allow exit, `{"decision":"block","reason":"..."}` to gate (`context/claude-code-mechanics.md#hooks` line 38–44 documents only `block` as a Stop decision-enum value; `context/verification-cookbook.md#hook-io-examples` line 226–235 shows `{"continue": true}` as the canonical allow-shape). The `approve` value was tolerated by Claude Code in v3.7 but is implementation-defined and at risk of dead-locking under a future schema tightening — closes review 01 M2.
+- **Returning `{"ok": true}` or `{"decision":"approve","reason":"..."}` from a prompt-type Stop hook**. Neither is documented. Use `{"continue": true}` to allow exit, `{"decision":"block","reason":"..."}` to gate (`context/claude-code-mechanics.md#hooks` line 38–44 documents only `block` as a Stop decision-enum value; `context/verification-cookbook.md#hook-io-examples` line 226–235 shows `{"continue": true}` as the canonical allow-shape). The `approve` value was tolerated by Claude Code in AGENTIFY iteration v3.7 (not Claude Code version) but is implementation-defined and at risk of dead-locking under a future schema tightening — closes review 01 M2.
 - **`async: true` on PreCompact**. Defeats the hook's purpose.
 - **Trusting `extraKnownMarketplaces` to auto-install in managed/project settings**. #16870 / #32606.
 - **Setting `allowManagedHooksOnly: true` while keeping productivity hooks at project scope**. They'll be blocked.
@@ -1926,13 +1958,16 @@ Final message:
 - **Demonstration-driven eval coverage.** Fixtures added to demonstrate a fix do not automatically span the input domain. When two consecutive iterations introduce regressions whose failure modes are invisible to the harness, the harness's regression-prevention story is structurally weak — add property-based assertions alongside the fixtures (idempotence, wall-clock bound, no-token-survives, prose-preservation for redactors; analogous invariants for other components).
 - **Sourcing strict-mode helper scripts without re-affirming `set -euo pipefail`.** A sourced `set -e` leaks into the calling shell; a future contributor who relaxes the source script's preamble silently re-enables strict mode in the caller. Either re-affirm `set -euo pipefail` after the source, or gate the source script's `set` line on a source-vs-execute check (`[[ "${BASH_SOURCE[0]:-$0}" == "${0}" ]]`). The harness's §12.13 `replay.sh` re-affirms after sourcing `session-start-inject.sh`.
 - **Overlay-merge scripts that do not snapshot original state behind a sentinel.** When a `apply` mode writes a `'{}'` placeholder to the backup because LOCAL did not exist, the corresponding `revert` mode restores `{}` rather than the truly-absent original — the post-revert state is a `settings.local.json` containing `{}` rather than no file at all. Use a `${BACKUP}.absent` sentinel so revert can distinguish "had no local settings" from "had local settings". Pair with a refuse-to-clobber check on a second `apply` so the backup's first capture is the canonical original.
-- **Cross-section prose drift inside AGENTIFY.md itself.** When iter-2 fixed the Stop allow-shape drift in §12.6 and §10, the same wording in §5.5 hook description and §Acknowledgements was left at the deprecated form (iter-02's M2 finding was specifically the bare-message regex gap; the Stop allow-shape was an earlier-lineage finding that iter-2's patch cluster also touched — closes review 02 P1 historical-attribution drift). The result was an internally self-contradictory prompt where the hook layering description authoritatively documented the deprecated shape while §10 anti-patterns and §12.6 implementation used the documented shape — a future reviser following §5.5's framing would re-introduce the original bug citing AGENTIFY.md as source-of-truth. The same class repeated in v6.1 with the helper count (M2 review 02): §12.24 prose said "35 §8 checks", every other site said "39", and the `HELPER_SLOTS` array literally seeded 40. Operational rule: when adding a new §10 entry that supersedes or contradicts a prior cross-section claim, edit every cross-section instance of the prior claim in the same patch (§5 hook descriptions, §10 anti-patterns, §12 implementations, §Acknowledgements) rather than adding a corrective in only one place. When updating any count, identifier list, or arithmetic, re-grep every site that names the previous value before shipping the patch. Verification gate: §8 #14f (cross-section approve-shape consistency) catches the M-doc-drift class for the specific Stop allow-shape; the same pattern (a tight-regex grep against AGENTIFY.md, filtering anti-pattern bullets and helper-self markers) generalizes to any future cross-section consistency invariant. A natural §8 #35 helper would extend the same pattern to count-consistency: grep every "N §8 checks" / "N helpers" claim against the array literal length. Closes review 02 M-doc-drift-1 / M-doc-drift-2 / Mo-ack-drift cluster + review 02 §10 strategic gap on cross-section consistency + review 02 M2 (helper count drift) + review 02 P1 (historical attribution).
+- **Cross-section prose drift inside AGENTIFY.md itself.** When iter-2 fixed the Stop allow-shape drift in §12.6 and §10, the same wording in §5.5 hook description and §Acknowledgements was left at the deprecated form, producing an internally self-contradictory prompt where the hook layering description authoritatively documented the deprecated shape while §10 anti-patterns and §12.6 implementation used the documented shape — a future reviser following §5.5's framing would re-introduce the original bug citing AGENTIFY.md as source-of-truth. Operational rule: when adding a new §10 entry that supersedes or contradicts a prior cross-section claim, edit every cross-section instance of the prior claim in the same patch (§5 hook descriptions, §10 anti-patterns, §12 implementations, §Acknowledgements) rather than adding a corrective in only one place. Closes review 02 M-doc-drift-1 / M-doc-drift-2 / Mo-ack-drift cluster and review 02 P1 (historical-attribution drift; iter-02's M2 was the bare-message regex gap, not the Stop allow-shape — the allow-shape was an earlier-lineage finding that iter-2's patch cluster also touched).
+- **Count / identifier / arithmetic drift after bumping a value.** When updating any count, identifier list, or arithmetic, re-grep every site that names the previous value before shipping the patch. v6.1 walked into this with the helper count (review 02 M2): §12.24 prose said "35 §8 checks", every other site said "39", and the `HELPER_SLOTS` array literally seeded 40. v6.2 repeated the class with the lineage list (review 03 Mo1): §12.16 enumerated `(v3.8, v6.0, v6.1, v6.2)` while §7.7 was left at `(v3.8, v6.0, v6.1)` after the same iteration's H1 bump. The site-grep gate in `REVISE_AGENTIFY_PROMPT.md`'s §Cross-section consistency block is the canonical procedure; `grep -nE '\(v[0-9]+\.[0-9]+(, v[0-9]+\.[0-9]+)*\)'` for version enumerations, `grep -nE '"?[0-9]+ §8|HELPER_SLOTS|30 \+ [0-9]+'` for helper counts. Closes review 02 M2 and review 03 Mo1.
+- **Cross-section consistency verified by §8.** §8 #14f (cross-section approve-shape consistency) catches the M-doc-drift class for the specific Stop allow-shape via a tight-regex grep against AGENTIFY.md, filtering anti-pattern bullets and helper-self markers. The same pattern generalizes to any future cross-section consistency invariant. §8 #35 extends the pattern to count-consistency: extracts the `HELPER_SLOTS` array length and compares against every "N §8 checks" / "N helpers" claim in prose. Closes review 02 §10 strategic gap on cross-section consistency and review 03 S1 (concrete schema for the count-consistency helper).
 - **Exact-literal fork-bomb detection instead of shape match.** A `case "$CMD" in *':(){ :|:& };:'*)` glob catches only the canonical whitespace form. Two minor variants slip past: `:(){:|:&};:` (no inner space) and `: ( ) { : | : & } ; :` (space-padded). The current §12.3 detector strips ALL whitespace via `tr -d '[:space:]'` before case-matching against the canonical shape `:(){:|:&};:`. Verified against all three whitespace forms plus benign forms (`myfn() { echo hi; }`, `for x in : ; do …; done`). Closes review 01 Mo5. §8 #14d pipes the three variants through the hook and asserts exit 2.
 - **Skills reading hook-input JSON.** Skills are SKILL.md prose loaded into context — they have no stdin pipe of hook-input fields. Only hook subprocesses receive `{ session_id, transcript_path, … }` on stdin. The v6.0 §6.4 prose conflated the two roles ("the skill writes loop-state.json with session_id from hook-input JSON"). The correct pattern is a small bin script (e.g., `bin/loop-bootstrap.sh`) triggered from a SessionStart hook that persists `session_id` using the documented Workaround chain from `context/known-bugs.md#issue-39530`: `--session-id <id>` flag → `$CLAUDE_SESSION_ID` → `$CLAUDE_CODE_SESSION_ID` → UUID from `transcript_path`. Closes review 01 Mo4.
 - **Wrapper-claim without wrapper implementation.** §12.6's v6.0 prose claimed a "wrapper" that converted malformed prompt-hook output into `{"continue": true}`. There was no wrapper script — the fallback worked only by accident, via Claude Code's documented "Stop hook exits 0 with malformed stdout → no decision → allow". Document the mechanism honestly: the model-side fallback instruction guides Haiku toward the allow-shape on uncertainty; the implicit "malformed → allow" fallback is the safety net. Future contributors who want stricter gating must own the deadlock risk. Closes review 01 Mo8.
 - **Pivot script that fails OPEN on missing dispatch.** §12.21's v6.0 path exited 0 when `${HOOK_DIR}/sibling-scout-bash.sh` was missing or non-executable. Effect: a typo in the install path silently widened every subagent's bash policy to the main session's. A security pivot that fails open is not a security control. Fail closed (exit 2) with a clear diagnostic; pair with §8 #31b regression check that renames the dispatch script and asserts exit 2. Closes review 01 Mo6.
 - **Conventional-commit hook accepting only quoted `-m`/`--message`.** The hook's regex set required quotes, so `git commit -m feat:nope` (no quotes, bash splits on whitespace) and `git commit --message wip:bad` fell through to empty SUBJ and the hook silently ALLOWED them. Add bare-message regexes with a first-char non-quote / non-whitespace constraint AFTER the quoted entries so quoted forms still win on tie. Closes review 01 M2.
 - **`-F`/`--file` opening arbitrary host-side paths.** A `git commit -F /tmp/COMMIT_EDITMSG` invocation reads any file the user can read. Under managed lockdown the hook itself isn't path-gated. Worse, when the path is outside the project the file may not exist by the time the hook runs and SUBJ stays empty → the hook falls through and ALLOWS the commit. Scope `-F`/`--file` paths to `${CLAUDE_PROJECT_DIR}` (allow `.git/` for editor mode), reject otherwise with exit 2. Closes review 01 M3.
+- **CPD scoping invariants: empty `CLAUDE_PROJECT_DIR` and unanchored `*/.git/*`.** When scoping `-F`/`--file` paths to the project root, two side channels: (a) empty `$CLAUDE_PROJECT_DIR` (CI step missed the var; running outside a Claude Code session) — the hook MUST exit 2 with a diagnostic, not fall through to a literal-string compare that allows everything; (b) unanchored `*/.git/*` alternation — a `case "$RESOLVED" in *.git/*)` glob matches `/tmp/evil/.git/COMMIT_EDITMSG` as readily as the project's own `.git/`. Use the anchored `"$CPD"/*` glob (with trailing-slash strip — see review 03 Mo2 + review 04 P2 double-slash extension — so the case-glob never expands to `/path//*` and falsely fails-closed on legitimate `realpath -m`-normalised paths). The §12.4 implementation is the canonical pattern; the forwarding-pointer comment at §12.4 line 2190 resolves here. Closes review 03 M1 + review 04 Mo1 (the iter-04 P1 inline-rationale shrink at §12.4 created the forwarding pointer; this entry creates the target it references).
 - **Unbounded Phase 0 sibling-scout parallel fan-out.** A 100-sibling fleet without a cap triggers 100 concurrent Haiku subagents at the ~15× per-token rate (§1 rule 4) and instantly exhausts the daily budget. Hard-cap at N=10 in-flight subagents; batch the candidate list, await each batch before spawning the next. Stays under `context/claude-code-mechanics.md#scheduled-tasks` 50-task-per-session ceiling with safety margin. Closes review 01 Mo7.
 - **Loop overlay sentinel scoped to the worktree instead of the git common-dir.** Worktrees share `.git`; the sentinel at `${CLAUDE_PROJECT_DIR}/.agents-work/.loop-overlay-active` is per-worktree, so peer worktrees spawned during an active loop fire the §5.5 #18 overlay-missing warning at every SessionStart — noise that trains operators to ignore the warning. Write the sentinel to `$(git rev-parse --git-common-dir)/.loop-overlay-active` so worktrees inherit; keep the project-dir fallback for non-git directories. Closes review 01 S3.
 
@@ -2159,31 +2194,31 @@ if [ -z "$SUBJ" ]; then
   if [[ -z "$FILE" && "$CMD" =~ --file[[:space:]]+([^[:space:]]+) ]]; then FILE="${BASH_REMATCH[1]}"; fi
   if [ -n "$FILE" ]; then
     # Refuse any -F/--file path that resolves outside the project root.
-    # Two side channels closed here (review 02 M1):
-    #   (a) Empty CLAUDE_PROJECT_DIR. The previous expansion
-    #       `"${CLAUDE_PROJECT_DIR:-}"/*` collapsed to `/*` when the env var
-    #       was unset (e.g. a platform-engineer sanity test
-    #       `printf '{}' | ./conventional-commit.sh`), matching every absolute
-    #       path on Unix and evaporating the scope check. Now we require a
-    #       non-empty CLAUDE_PROJECT_DIR up-front.
-    #   (b) Unanchored `*/.git/*` alternation. The intent was to allow the
-    #       project's own `.git/COMMIT_EDITMSG` for editor-mode commits, but
-    #       the project's `.git/` already lives under $CLAUDE_PROJECT_DIR,
-    #       so the first branch already covered it. The second branch
-    #       allowed arbitrary attacker-crafted paths like
-    #       `/tmp/evil/.git/COMMIT_EDITMSG`. Dropped entirely.
-    # `realpath -m` works on missing paths (returns the absolute path it WOULD
-    # have had); on systems lacking `realpath -m` we fall back to the literal
-    # $FILE.
+    # Two side channels closed here (empty CPD; unanchored `*/.git/*`); full
+    # rationale at §10 "CPD scoping invariants" anti-pattern. Closes review
+    # 04 Mo1 (the iter-04 forwarding pointer that previously named a phantom
+    # §10 entry now resolves to a real anchor).
     if [ -z "${CLAUDE_PROJECT_DIR:-}" ]; then
       echo "conventional-commit: CLAUDE_PROJECT_DIR not set; -F/--file path cannot be scoped. Run inside a Claude Code session, or set CLAUDE_PROJECT_DIR explicitly." >&2
       exit 2
     fi
+    # Strip ANY number of trailing slashes so the case-glob `"$CPD"/*` doesn't
+    # expand to `/path//*` and reject every `realpath -m`-normalised in-repo
+    # path. The loop form handles single (`/tmp/proj/`) AND double-slash
+    # (`/tmp/proj//`) CPDs — the latter plausible from a CI step concatenating
+    # `${BASH_REF}/` twice. The single `${CPD%/}` form would only strip one
+    # slash and double-slash CPDs would still REFUSE every legitimate path.
+    # Closes review 03 Mo2 (single-trailing-slash friendly-fire) and review
+    # 04 P2 (double-trailing-slash extension). `realpath -m` works on missing
+    # paths (returns the absolute path it WOULD have had); on systems lacking
+    # `realpath -m` we fall back to the literal $FILE.
+    CPD="$CLAUDE_PROJECT_DIR"
+    while [[ "${CPD: -1}" = / ]]; do CPD="${CPD%/}"; done
     RESOLVED="$(realpath -m "$FILE" 2>/dev/null || echo "$FILE")"
     case "$RESOLVED" in
-      "$CLAUDE_PROJECT_DIR"/*) : ;;
+      "$CPD"/*) : ;;
       *)
-        echo "conventional-commit: -F/--file path outside repo root ($CLAUDE_PROJECT_DIR); refusing. Move the message file inside the repo or use -m/--message." >&2
+        echo "conventional-commit: -F/--file path outside repo root ($CPD); refusing. Move the message file inside the repo or use -m/--message." >&2
         exit 2
         ;;
     esac
@@ -3085,7 +3120,7 @@ exit 0
 
 ### 12.16 `.git/hooks/prepare-commit-msg` (installed by `init.sh`)
 
-Same regex as §12.4 (cookbook form, mixed-case scope authorized). First-line marker `# AGENTIFY prepare-commit-msg v6.0` so `init.sh --uninstall` can fingerprint it. The marker version tracks the AGENTIFY.md H1 version so a future uninstall pass can grep all generations (v3.8, v6.0, v6.1, v6.2) via the version-tolerant regex `^# AGENTIFY prepare-commit-msg v[0-9]` (§7.7 closes review 02 P4); closes review 01 Polish #5.
+Same regex as §12.4 (cookbook form, mixed-case scope authorized). First-line marker `# AGENTIFY prepare-commit-msg v6.0` so `init.sh --uninstall` can fingerprint it. The marker version tracks the AGENTIFY.md H1 version so a future uninstall pass can grep all internal iteration markers (v3.8, v6.0, v6.1, v6.2) via the version-tolerant regex `^# AGENTIFY prepare-commit-msg v[0-9]`. v6.1 and v6.2 are loop-internal markers (the H1 remains at v6.0); the enumeration covers any header future iterations may stamp during a development pass — same iteration-vs-release disambiguation as the §10 "v3.7 (not Claude Code version)" pattern (§7.7 closes review 02 P4 and review 04 P3); closes review 01 Polish #5.
 
 ```bash
 #!/usr/bin/env bash
@@ -3493,7 +3528,7 @@ See AGENTS.md `<sunset_candidates>` and §7.7 retirement plan.
 
 ### 12.24 `scripts/verify-bootstrap.sh`
 
-Runs all 40 §8 checks (30 numbered + 14b/14c managed-lockdown gates + 14d guard-bash smoke + 14e sweep-plans smoke + 14f approve-drift detector + 24b Stop-model registration + 31b pivot-fail-closed + 32/33/34 anti-pattern gaps) and emits the §13 results table. Idempotent; safe to run from any session. Review 02 M2 closed the v6.1 cross-section drift where this section's prose still said "35 §8 checks" against the array literal's 40 helper slots.
+Runs all 41 §8 checks (30 numbered + 14b/14c managed-lockdown gates + 14d guard-bash smoke + 14e sweep-plans smoke + 14f approve-drift detector + 24b Stop-model registration + 31b pivot-fail-closed + 32/33/34 anti-pattern gaps + 35 count-consistency) and emits the §13 results table. Idempotent; safe to run from any session. Review 02 M2 closed the v6.1 cross-section drift where this section's prose still said "35 §8 checks" against the array literal's 40 helper slots; review 03 S1 adds the #35 count-consistency stub that generalizes the §14f approve-shape detector to any prose count claim.
 
 ```bash
 #!/usr/bin/env bash
@@ -3539,12 +3574,13 @@ mkdir -p "$CHECKS_DIR"
 [ -f "$CHECKS_DIR/.gitkeep" ] || : > "$CHECKS_DIR/.gitkeep"
 
 # Numbered helpers 01..30 plus sub-checks 14b, 14c, 14d, 14e, 14f, 24b, 31b,
-# 32, 33, 34 (managed-lockdown gates, guard-bash + sweep-plans + Stop-model
-# smokes, pivot-fail-closed regression, and the three §10 anti-pattern coverage
-# checks). Portable digit padding: BSD seq lacks -f; use printf instead.
+# 32, 33, 34, 35 (managed-lockdown gates, guard-bash + sweep-plans + Stop-model
+# smokes, pivot-fail-closed regression, the three §10 anti-pattern coverage
+# checks, and the cross-section count-consistency stub). Portable digit
+# padding: BSD seq lacks -f; use printf instead.
 HELPER_SLOTS=()
 for i in $(seq 1 30); do HELPER_SLOTS+=("$(printf '%02d' "$i")"); done
-HELPER_SLOTS+=("14b" "14c" "14d" "14e" "14f" "24b" "31b" "32" "33" "34")
+HELPER_SLOTS+=("14b" "14c" "14d" "14e" "14f" "24b" "31b" "32" "33" "34" "35")
 
 for n in "${HELPER_SLOTS[@]}"; do
   helper="$CHECKS_DIR/${n}.sh"
@@ -3571,7 +3607,7 @@ done
   cat "$OUT.header"
   cat "$OUT.tmp"
   echo
-  echo "**Summary**: $pass_count pass, $fail_count fail, $skip_count skip (total 40 = 30 numbered + 14b + 14c + 14d + 14e + 14f + 24b + 31b + 32 + 33 + 34)."
+  echo "**Summary**: $pass_count pass, $fail_count fail, $skip_count skip (total 41 = 30 numbered + 14b + 14c + 14d + 14e + 14f + 24b + 31b + 32 + 33 + 34 + 35)."
 } > "$OUT"
 rm -f "$OUT.tmp" "$OUT.header"
 
@@ -3579,7 +3615,7 @@ echo "verify-bootstrap: results in $OUT ($pass_count/$((pass_count + fail_count 
 [ "$fail_count" -eq 0 ]
 ```
 
-The runner expects per-check helpers at `.agents-work/evals/checks/01.sh`–`30.sh` plus `14b.sh`, `14c.sh`, `14d.sh`, `14e.sh`, `14f.sh`, `24b.sh`, `31b.sh`, `32.sh`, `33.sh`, `34.sh`, each a single-purpose script whose first line is a `#`-comment naming the check. `init.sh` seeds 40 helpers (§5.8) so the runner does not abort on first install; stub helpers emit `stub: implement me at ...` on their first line and exit 0, which the runner classifies as SKIP, while real helpers (`14d`, `14e`, `14f`, `24b`) ship production verification logic. The two managed-lockdown sub-checks (#14b lockfiles, #14c `git reset --hard origin`) ship with the precondition gate from §8 #14b inlined so they auto-skip on engineer machines without `allowManagedPermissionRulesOnly: true`. The two from-iter-1 real helpers (#14d `guard-bash` blocks every documented dangerous pattern, #14e `sweep-plans` actually copies a fresh plan) close the §8 verification gaps that allowed review 01 C3 and M1 to ship undetected. The from-iter-2 real helper (#14f cross-section `approve`-shape consistency) closes the M-doc-drift class identified in review 02 §10. The four iter-02 entries close review 01 Mo2 / Mo6 / S4: #24b verifies Stop hook is registered with the haiku alias (was a stub in v6.0, ships real in v6.1), #31b regresses on `agent-bash-pivot.sh` fail-closed semantics, #32 / #33 / #34 cover the §10 anti-pattern gaps for Stop `additionalContext` use, `--add-dir` write semantics, and unanchored `Read/Edit/Write(*)` allows. Engineers replace stubs incrementally; PASS/FAIL replace SKIP as helpers gain real verification logic.
+The runner expects per-check helpers at `.agents-work/evals/checks/01.sh`–`30.sh` plus `14b.sh`, `14c.sh`, `14d.sh`, `14e.sh`, `14f.sh`, `24b.sh`, `31b.sh`, `32.sh`, `33.sh`, `34.sh`, `35.sh`, each a single-purpose script whose first line is a `#`-comment naming the check. `init.sh` seeds 41 helpers (§5.8) so the runner does not abort on first install; stub helpers emit `stub: implement me at ...` on their first line and exit 0, which the runner classifies as SKIP, while real helpers (`14d`, `14e`, `14f`, `24b`) ship production verification logic. The two managed-lockdown sub-checks (#14b lockfiles, #14c `git reset --hard origin`) ship with the precondition gate from §8 #14b inlined so they auto-skip on engineer machines without `allowManagedPermissionRulesOnly: true`. The two from-iter-1 real helpers (#14d `guard-bash` blocks every documented dangerous pattern, #14e `sweep-plans` actually copies a fresh plan) close the §8 verification gaps that allowed review 01 C3 and M1 to ship undetected. The from-iter-2 real helper (#14f cross-section `approve`-shape consistency) closes the M-doc-drift class identified in review 02 §10. The four iter-02 entries close review 01 Mo2 / Mo6 / S4: #24b verifies Stop hook is registered with the haiku alias (was a stub in v6.0, ships real in v6.1), #31b regresses on `agent-bash-pivot.sh` fail-closed semantics, #32 / #33 / #34 cover the §10 anti-pattern gaps for Stop `additionalContext` use, `--add-dir` write semantics, and unanchored `Read/Edit/Write(*)` allows. #35 generalizes the §14f drift detector to count-consistency (closes review 03 S1) and ships as a SKIP-by-default stub. Engineers replace stubs incrementally; PASS/FAIL replace SKIP as helpers gain real verification logic.
 
 ### 12.25 `scripts/fleet-verify.sh`
 
@@ -3896,7 +3932,7 @@ Last message in this session:
 
 1. Summary: five bullets, one per reference-architecture part.
 2. Files created/modified grouped.
-3. Verification results table (40 checks, emitted by `scripts/verify-bootstrap.sh`).
+3. Verification results table (41 checks, emitted by `scripts/verify-bootstrap.sh`).
 4. Cross-repo map table; if `scripts/fleet-verify.sh` is installed, also the fleet aggregate.
 5. Three next actions for the human.
 6. Open DECISION points — instead of recapitulating §7.4's list inline, reference the canonical artifact `documentation/decisions/0000-bootstrap-decisions.md` (seeded by `init.sh` from §12.27). The final message lists any `<!-- TODO -->` rows still open in that file so the human has a single grep-able place to track resolution. Closes review 01 Polish #7.
@@ -3932,6 +3968,8 @@ Token budgeting (§7.5) reads `claude --print "/cost"` for per-session and the C
 The harness has a documented retirement path (§7.7, `init.sh --uninstall`) for the day Anthropic Managed Agents reach parity. Fleet-level aggregate verification (§7.8, `scripts/fleet-verify.sh`) closes the per-repo blind spot for {__AGT_FLEET_SIZE__}-engineer / 100-repo deployments: a single red/yellow/green table beats 100 stale per-repo reports nobody reads.
 
 Eval coverage (§5.10, §12.13) extends beyond `{__AGT_SKILL_PREFIX__}-orient` and `{__AGT_SKILL_PREFIX__}-handoff` to `{__AGT_SKILL_PREFIX__}-commit` and `{__AGT_SKILL_PREFIX__}-quality-review` via permissive-regex goldens; literal-diff goldens stay reserved for deterministic-fixture skills. Replay distinguishes invocation failure (exit 2) from golden drift (exit 1) so CI can route differently.
+
+Review-numbering note: AGENTIFY.md carries two interleaved `review NN` numbering schemes. The first (9 sites at §5.10 / §6.4 / §12.5 / §12.13 / §12.20, covering attributions like M2 / M3 / C1 / Mo4 / Mo5 / Mo7 / S8 / S9 under `review 04`, and analogous attributions under `review 01` / `review 02`) traces to a prior `v3.x` adversarial-review lineage that predates the current in-session revise/review loop. The second (citations like `closes review 04 Mo1` / `review 04 P1-P4` added by iter-05 and later) refers to the current loop's iteration history, archived under `.agents-work/reviews/<NN>-<timestamp>.md` and `.agents-work/revisions/<NN>-<timestamp>.md`. Disambiguation by location: the current-loop attributions concentrate at §10 / §12.4 / §8 #14f / §7.7 / §12.16 / this §Acknowledgements paragraph (the surfaces the in-session loop has touched since v6.0); the prior-`v3.x` attributions concentrate at §5.10 / §6.4 / §12.5 / §12.13 / §12.20 (the surfaces the v3.x lineage's adversarial-review cluster touched before the in-session loop existed). Future readers grep'ing `review 04` for current-loop findings will see the union — `PATCH_LOG.md`'s per-iteration headers and the `.agents-work/` archives are the authoritative iteration index. Closes review 04 P4.
 
 ---
 
