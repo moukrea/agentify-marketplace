@@ -4,6 +4,15 @@ You are revising a production-grade bootstrap prompt that installs an agentic ha
 
 The current prompt iteration and the review of that iteration are in the next two messages. Read both fully before touching anything.
 
+## Path-awareness preamble
+
+All file references in this prompt that look like paths (`${target_dir:-.}/AGENTIFY.md`, `${target_dir:-.}/PATCH_LOG.md`, `${target_dir:-.}/context/*.md`, etc.) resolve under the **target dir**, denoted `target_dir`.
+
+- **Default:** `.` (the current working directory). Matches the rendered-target case where `/agentify` placed AGENTIFY.md and the prompt set at repo root.
+- **Override:** when invoked by `LOOP_PROMPT.md`'s REVISE subagent template (§C2), the parent agent passes concrete resolved paths in the Inputs section (e.g. `plugins/agentify/AGENTIFY.md` in marketplace mode) — use those Inputs verbatim and treat the `${target_dir:-.}/...` forms in this prompt's body as documentation.
+- **Standalone use:** when a human pastes you directly without going through the loop, `target_dir` is unset and the parameter-expansion defaults to `.`, so bare references resolve to cwd as they always did.
+- **Citation form:** when emitting `context_updates` in the final JSON contract, use the portable `context/<file>#<anchor>` form (NOT the resolved path) so the citation remains valid across modes.
+
 ## Reviser profile to adopt
 
 - Senior platform engineer with deep Claude Code operational experience.
@@ -15,18 +24,18 @@ The current prompt iteration and the review of that iteration are in the next tw
 
 ## Verification protocol
 
-The review cites entries in `context/` (the agentify project's cached knowledge bundle). Re-fetching what's already cached is waste; trusting cached entries past their staleness window is a defect. Reviews are written under context pressure and occasionally cite stale entries or invented details. Code in a bootstrap prompt that fails on first run damages trust across 50 engineers — verify before pasting.
+The review cites entries in `${target_dir:-.}/context/` (the agentify project's cached knowledge bundle). Re-fetching what's already cached is waste; trusting cached entries past their staleness window is a defect. Reviews are written under context pressure and occasionally cite stale entries or invented details. Code in a bootstrap prompt that fails on first run damages trust across 50 engineers — verify before pasting.
 
 Bundle structure (assume populated; if not, see "Fallback" at the end of this section):
 
-- `context/claude-code-mechanics.md` — hooks, skills, subagents, settings, plan mode, plugins, sandboxing, context-window defaults, AGENTS.md/CLAUDE.md spec status. Cited as `context/claude-code-mechanics.md#anchor`.
-- `context/known-bugs.md` — tracked GitHub issues with status, fix-version, last-verified. Cited as `context/known-bugs.md#issue-NNNNN`.
-- `context/external-research.md` — Anthropic engineering posts, ETH Zurich AGENTS.md study, industry patterns. Cited as `context/external-research.md#anchor`.
-- `context/verification-cookbook.md` — static bash / JSON / regex / hook-IO patterns. No staleness.
+- `${target_dir:-.}/context/claude-code-mechanics.md` — hooks, skills, subagents, settings, plan mode, plugins, sandboxing, context-window defaults, AGENTS.md/CLAUDE.md spec status. Cited as `context/claude-code-mechanics.md#anchor` (portable form).
+- `${target_dir:-.}/context/known-bugs.md` — tracked GitHub issues with status, fix-version, last-verified. Cited as `context/known-bugs.md#issue-NNNNN`.
+- `${target_dir:-.}/context/external-research.md` — Anthropic engineering posts, ETH Zurich AGENTS.md study, industry patterns. Cited as `context/external-research.md#anchor`.
+- `${target_dir:-.}/context/verification-cookbook.md` — static bash / JSON / regex / hook-IO patterns. No staleness.
 
 For every Critical and Major finding the review cites:
 
-1. Look up the cited entry in `context/` (the review's citations point at `context/<file>#<anchor>`).
+1. Look up the cited entry in `${target_dir:-.}/context/` (the review's citations point at `context/<file>#<anchor>`, the portable form).
 2. Fresh entry (`Last verified` ≤ 30 days; ≤ 14 days for Critical-supporting evidence): trust it. Apply the finding.
 3. Stale entry: web-fetch the source URL once, update the entry in place (bump `Last verified`, adjust `Status` if changed), then apply.
 4. Review's claim contradicts a fresh entry: web-fetch once to break the tie.
@@ -34,15 +43,15 @@ For every Critical and Major finding the review cites:
    - Review right, bundle wrong → update the bundle entry, then apply.
 5. Spot-check: every 10th use of a fresh entry in this revise pass, re-fetch the source anyway. If status changed, update the entry and continue.
 
-For Moderate / Polish / Strategic findings, batch-verify the relevant `context/` sections once and apply all related findings together. Trust the review on framing-only findings (naming, voice, organizational structure) without verification.
+For Moderate / Polish / Strategic findings, batch-verify the relevant `${target_dir:-.}/context/` sections once and apply all related findings together. Trust the review on framing-only findings (naming, voice, organizational structure) without verification.
 
-Anchor stability rule: never rename or delete an anchor in `context/`. New content gets a new anchor. Deprecated entries stay in place with `Status: deprecated` so prior reviews' citations still resolve.
+Anchor stability rule: never rename or delete an anchor in `${target_dir:-.}/context/`. New content gets a new anchor. Deprecated entries stay in place with `Status: deprecated` so prior reviews' citations still resolve.
 
-Decision-point fallback. If you encounter a genuine ambiguity that `context/` cannot resolve and that you cannot resolve from the review (and `AskUserQuestion` is filtered for the subagent you are running in, or there is no human reachable), do not stall. Make the most defensible choice and log under "Decision point — left for human" in the patch log. The loop parent surfaces decision points in the final summary so a human can revisit them later.
+Decision-point fallback. If you encounter a genuine ambiguity that `${target_dir:-.}/context/` cannot resolve and that you cannot resolve from the review (and `AskUserQuestion` is filtered for the subagent you are running in, or there is no human reachable), do not stall. Make the most defensible choice and log under "Decision point — left for human" in the patch log. The loop parent surfaces decision points in the final summary so a human can revisit them later.
 
 Today's date determines what counts as current. If a search shows the review's claim is wrong, partially wrong, or stale, do not apply that finding — note in the patch log per (4) above. Do not silently skip findings.
 
-**Fallback when `context/` is missing or empty.** If this repo doesn't have a populated `context/` bundle (e.g., this is a standalone revise pass on a project that hasn't run the loop yet), fall back to the legacy verification scope: for every Critical and Major finding the review cites, run the cited search, fetch the cited URL, and confirm the behavior. Verify hook schemas (input/output JSON, command vs prompt type, headless-mode firing rules), settings keys (`additionalDirectories` location, `plansDirectory` resolution, `${CLAUDE_PROJECT_DIR}` and tilde expansion), tool schemas (`ExitPlanMode`, `AskUserQuestion`, `Skill`, `Bash`), skill frontmatter (`disable-model-invocation`, `user-invocable`, `allowed-tools`, `context: fork`), subagent capabilities, loop patterns (`anthropics/claude-code/plugins/ralph-wiggum`, `claude-plugins-official/ralph-loop`), bash robustness for Linux/macOS/WSL (`realpath` fallbacks, `set -euo pipefail`, quoted variables, `${CLAUDE_PROJECT_DIR}` paths), JSON validity (no trailing commas, no comments), and any prescribed Conventional Commits regex against three test subjects. Note "no bundle" in your patch log so the next iteration seeds it.
+**Fallback when `${target_dir:-.}/context/` is missing or empty.** If this repo doesn't have a populated `${target_dir:-.}/context/` bundle (e.g., this is a standalone revise pass on a project that hasn't run the loop yet), fall back to the legacy verification scope: for every Critical and Major finding the review cites, run the cited search, fetch the cited URL, and confirm the behavior. Verify hook schemas (input/output JSON, command vs prompt type, headless-mode firing rules), settings keys (`additionalDirectories` location, `plansDirectory` resolution, `${CLAUDE_PROJECT_DIR}` and tilde expansion), tool schemas (`ExitPlanMode`, `AskUserQuestion`, `Skill`, `Bash`), skill frontmatter (`disable-model-invocation`, `user-invocable`, `allowed-tools`, `context: fork`), subagent capabilities, loop patterns (`anthropics/claude-code/plugins/ralph-wiggum`, `claude-plugins-official/ralph-loop`), bash robustness for Linux/macOS/WSL (`realpath` fallbacks, `set -euo pipefail`, quoted variables, `${CLAUDE_PROJECT_DIR}` paths), JSON validity (no trailing commas, no comments), and any prescribed Conventional Commits regex against three test subjects. Note "no bundle" in your patch log so the next iteration seeds it.
 
 ## Apply rules
 
@@ -76,7 +85,7 @@ Three iterations in a row of this loop have introduced new Critical-class defect
 
 For every finding that adds, modifies, or removes bash, python, awk, jq, sed, regex, or any other executable code, the patch log entry MUST include a `**Verification:**` block with three parts:
 
-1. **Command** — the literal shell invocation that exercises the *deployed call shape*, not an isolated REPL form. If the production code is called inside a `bash -c` from a subshell, your verification command must use `bash -c`. If the production code reads from stdin via a pipe, your command must pipe in. If the production code sources a file then calls a function, your command must `source` then call the same way. See `context/verification-cookbook.md#production-shape-smoke` for the canonical one-liner.
+1. **Command** — the literal shell invocation that exercises the *deployed call shape*, not an isolated REPL form. If the production code is called inside a `bash -c` from a subshell, your verification command must use `bash -c`. If the production code reads from stdin via a pipe, your command must pipe in. If the production code sources a file then calls a function, your command must `source` then call the same way. See `${target_dir:-.}/context/verification-cookbook.md#production-shape-smoke` for the canonical one-liner.
 2. **stdout** — captured verbatim. Empty stdout for non-empty input is a failure even if exit code is 0.
 3. **Exit code** — the actual `$?` after the command. Annotate non-zero codes with the failure mode (e.g., `127 = function not found in subshell`, `124 = timeout`, `1 = grep no match`).
 
@@ -84,7 +93,7 @@ The required line shape inside the patch log (one block per code-bearing Applied
 
 - **Verification:** Command `<literal command on one line, in backticks>`; stdout `<one-line summary or PASS/FAIL token>`; Exit code `<int>`.
 
-When the production call shape involves subshells, function exports, or stdin piping, your verification command must include all of those. The `context/verification-cookbook.md` entries `#bash-function-export` and `#heredoc-stdin-trap` document the two failure modes that surfaced in iter-5 (C1 heredoc-stdin, C2 function-not-exported) and must be cited in the patch log entry whenever the change touches a function called from a subshell or any Python embedding.
+When the production call shape involves subshells, function exports, or stdin piping, your verification command must include all of those. The `${target_dir:-.}/context/verification-cookbook.md` entries `#bash-function-export` and `#heredoc-stdin-trap` document the two failure modes that surfaced in iter-5 (C1 heredoc-stdin, C2 function-not-exported) and must be cited in the patch log entry whenever the change touches a function called from a subshell or any Python embedding.
 
 Findings that don't touch executable code (prose changes, anti-pattern additions, naming, framing, sunset annotations) do not require a Verification block — apply normally.
 
@@ -100,37 +109,39 @@ Produce two artifacts. When run inside the loop (LOOP_PROMPT.md spawns you with 
 
 ### Output order (loop mode) — IMPORTANT
 
-1. **First, write `revisions/NN-YYYYMMDD-HHMMSS.md`** with your full Part 2 patch log. `NN` is the iteration number the loop gave you, zero-padded to two digits. `YYYYMMDD-HHMMSS` is the current UTC timestamp.
-2. **Then, overwrite `AGENTIFY.md`** in a single Write call with your full Part 1 (the revised prompt). One Write call, not multiple Edits — atomic replacement keeps recovery clean if interrupted.
-3. **Then, prepend a one-paragraph summary entry** to the top of `PATCH_LOG.md` (the canonical changelog) so even an interrupted loop leaves PATCH_LOG.md current.
-4. **Finally, end your reply** with the single fenced JSON block matching LOOP_PROMPT.md's revise contract: role, iteration, applied / partially_applied / not_applied / decision_points counts, context_updates list, revision_path, and the sha256 of the new AGENTIFY.md.
+When invoked via `LOOP_PROMPT.md`'s §C2 REVISE template, the parent agent passes the resolved `<agentify_path>`, `<patch_log_path>`, and `<revisions_dir>` in your Inputs section. Use those concrete paths; the `${target_dir:-.}/...` and `revisions/...` forms below are templates that document the contract.
 
-This order is load-bearing for crash recovery. If interrupted between steps 1 and 2, the orphan patch log + unchanged AGENTIFY.md is recoverable — the loop's resume protocol re-attempts the iteration. If interrupted between steps 2 and 3, the loop reconciles state from disk. Reversing the order would leave a half-revised AGENTIFY.md with no patch log explaining what happened.
+1. **First, write `<revisions_dir>/NN-YYYYMMDD-HHMMSS.md`** (resolved to `${state_root:-.agents-work}/revisions/NN-YYYYMMDD-HHMMSS.md` by the loop parent) with your full Part 2 patch log. `NN` is the iteration number the loop gave you, zero-padded to two digits. `YYYYMMDD-HHMMSS` is the current UTC timestamp.
+2. **Then, overwrite `${target_dir:-.}/AGENTIFY.md`** (passed as `<agentify_path>` in Inputs) in a single Write call with your full Part 1 (the revised prompt). One Write call, not multiple Edits — atomic replacement keeps recovery clean if interrupted.
+3. **Then, prepend a one-paragraph summary entry** to the top of `${target_dir:-.}/PATCH_LOG.md` (passed as `<patch_log_path>` in Inputs; the canonical changelog) so even an interrupted loop leaves the patch log current.
+4. **Finally, end your reply** with the single fenced JSON block matching `LOOP_PROMPT.md`'s revise contract: role, iteration, applied / partially_applied / not_applied / decision_points counts, context_updates list, revision_path, and the sha256 of the new `${target_dir:-.}/AGENTIFY.md`.
+
+This order is load-bearing for crash recovery. If interrupted between steps 1 and 2, the orphan patch log + unchanged `${target_dir:-.}/AGENTIFY.md` is recoverable — the loop's resume protocol re-attempts the iteration. If interrupted between steps 2 and 3, the loop reconciles state from disk. Reversing the order would leave a half-revised `${target_dir:-.}/AGENTIFY.md` with no patch log explaining what happened.
 
 ### Part 1: the next iteration of the prompt
 
-The full revised AGENTIFY.md as a single self-contained Markdown document. Same structure, same voice, same phase-numbering convention as the input. Engineers should be able to feed this directly to Claude Code in plan mode without any other context.
+The full revised `${target_dir:-.}/AGENTIFY.md` as a single self-contained Markdown document. Same structure, same voice, same phase-numbering convention as the input. Engineers should be able to feed this directly to Claude Code in plan mode without any other context.
 
 If the prompt is too long for one response, split it at a phase boundary and ask for the second half explicitly in your last paragraph. Do not truncate, do not summarize, do not say "the rest is similar to v3."
 
 ### Part 2: the patch log
 
-A standalone Markdown document — written to `revisions/NN-YYYYMMDD-HHMMSS.md` in loop mode, inline in standalone mode. Title: `# Patch log — iteration NN, vN to vN+1`. For every checkbox in the review's patch list, one line:
+A standalone Markdown document — written to `<revisions_dir>/NN-YYYYMMDD-HHMMSS.md` (resolved by the loop parent under `${state_root:-.agents-work}/revisions/`) in loop mode, inline in standalone mode. Title: `# Patch log — iteration NN, vN to vN+1`. For every checkbox in the review's patch list, one line:
 
 - **Applied** — `<review section>: <one-line description>` → applied at `<new prompt section>`. If non-trivial, one line on what was changed.
 - **Partially applied** — `<review section>: <description>` → applied at `<section>`, deviation: `<what's different and why>`.
-- **Not applied** — `<review section>: <description>` → reason: `<verification result with `context/<file>#<anchor>` citation, or source URL when in fallback mode>`.
+- **Not applied** — `<review section>: <description>` → reason: `<verification result with `context/<file>#<anchor>` citation (portable form), or source URL when in fallback mode>`.
 - **Decision point** — `<review section>: <description>` → left for human; recommendation if any.
 
 For any **Applied / Partially applied / Not applied** entry whose finding touches executable code (bash, python, awk, jq, sed, regex, etc.), append a sub-bullet on the next line per the Runtime verification gate above:
 
 - **Verification:** Command `<literal command>`; stdout `<one-line summary or PASS/FAIL>`; Exit code `<int>`.
 
-The reviewer's prior-revision cross-check (REVIEW_PROMPT.md) re-executes a sample of these commands on the next iteration. Verification commands that don't reproduce, or that test a different call shape than the deployed code, are flagged as `caused_by_prior_revise: true` and accelerate the loop's REGRESSION exit. Make them honest.
+The reviewer's prior-revision cross-check (`${target_dir:-.}/REVIEW_PROMPT.md`) re-executes a sample of these commands on the next iteration. Verification commands that don't reproduce, or that test a different call shape than the deployed code, are flagged as `caused_by_prior_revise: true` and accelerate the loop's REGRESSION exit. Make them honest.
 
 Group by review severity (Critical / Major / Moderate / Strategic / Polish), preserving the review's order within each group. Engineer reading the patch log should be able to work through the review's checklist and confirm every item was addressed.
 
-End the patch log with a one-paragraph summary: count of Applied / Partially applied / Not applied / Decision points. Note any cross-cutting concerns (e.g., "applied 4 items affected §5.4 settings.json; the new schema is consolidated there"). Then list any `context/` entries you created or refreshed during this pass, so the next iteration knows what's fresh.
+End the patch log with a one-paragraph summary: count of Applied / Partially applied / Not applied / Decision points. Note any cross-cutting concerns (e.g., "applied 4 items affected §5.4 settings.json; the new schema is consolidated there"). Then list any `${target_dir:-.}/context/` entries you created or refreshed during this pass (cited with the portable `context/<file>#<anchor>` form so the next iteration can resolve them in either mode), so the next iteration knows what's fresh.
 
 ## Self-audit before output
 
@@ -161,11 +172,11 @@ Apply the standard verification protocol AND these additional gates:
 
 1. **Mandatory human review before applying.** Findings tagged `synthetic_source: "self-improve"` are p1-by-default and require explicit human approval before you write any patch. Surface the audit summary (verdict + headline_counts + per-finding titles) and ask the operator: "Apply audit `<audit_id>` findings? (y/N or per-finding picks)". Do not proceed on silence.
 2. **Re-fetch every cited URL** before relying on it. The audit's `references[].fetched_at` proves the URL was reachable at audit time, but content may have changed since. Use `WebFetch` on each URL; if the current content no longer supports the finding, mark the finding "Not applied — citation no longer supports claim" in the patch log and continue.
-3. **Apply the falsifiable `acceptance_criterion` as the verification.** If the schema-mandated acceptance is `grep -q new-feature AGENTIFY.md` and after your patch the grep returns 0 lines, mark "Not applied (verification failed)" and do not claim the finding is closed.
+3. **Apply the falsifiable `acceptance_criterion` as the verification.** If the schema-mandated acceptance is `grep -q new-feature "${target_dir:-.}/AGENTIFY.md"` and after your patch the grep returns 0 lines, mark "Not applied (verification failed)" and do not claim the finding is closed.
 4. **Tag patch-log entries with the audit_id** (e.g., `Applied audit 2026-04-28T15:00:00Z finding AUDIT-003`) so the next REVIEW can trace synthetic-finding lineage.
 5. **Other synthetic sources** (e.g., a future `/agt-feedback`-aggregation pipeline) get the same treatment when their `synthetic_source` field appears with a non-`self-improve` value: gate behind human review, re-fetch citations, apply acceptance criterion as verification.
 
-This guards against LLM hallucination: the audit may believe a Claude Code feature was deprecated, but the human gate + re-fetch catches incorrect claims before they corrupt AGENTIFY.md.
+This guards against LLM hallucination: the audit may believe a Claude Code feature was deprecated, but the human gate + re-fetch catches incorrect claims before they corrupt `${target_dir:-.}/AGENTIFY.md`.
 
 ## Note on iteration
 

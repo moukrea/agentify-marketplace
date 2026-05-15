@@ -44,35 +44,30 @@ grep -q '/agt-loop status' "$SKILL" && pass "SKILL.md documents 'status' subcomm
 grep -q '/agt-loop stop' "$SKILL" && pass "SKILL.md documents 'stop' subcommand" \
                                   || ng "SKILL.md missing 'stop' docs"
 
-echo
-echo "=== self-loop smoke: synthetic acceptance fixture in tmp ==="
-# Set up a tmp 'self repo' that mirrors this repo's loop-relevant files.
-SELF="$TMP/self-fixture"
-mkdir -p "$SELF/.agents-work" "$SELF"
-cat >"$SELF/agentify.config.json" <<'EOF'
-{
-  "company": {"name": "agentify project"},
-  "skills": {"prefix": "agt"},
-  "plugin": {"name": "agentify"},
-  "loop": {"path_root": ".agents-work"}
-}
-EOF
-cp plugins/agentify/AGENTIFY.md "$SELF/AGENTIFY.md"
-EXPECTED_SHA=$(sha256sum "$SELF/AGENTIFY.md" | cut -d' ' -f1)
-
-echo
-echo "=== self-loop smoke: simulate /agt-loop start state-init ==="
-cd "$SELF"
-state_root=$(jq -r '.loop.path_root // ".agents-work"' agentify.config.json)
-mkdir -p "$state_root/revisions" "$state_root/reviews"
-if [ ! -f "$state_root/loop-state.json" ]; then
-  cat > "$state_root/loop-state.json" <<EOF
+# State-init helper: mirrors the SKILL.md's `start` bash block. Sourced into
+# both fixtures below so the two scenarios share one implementation and any
+# drift between SKILL.md and the smoke is caught by visual diff at review time.
+state_init() {
+  state_root=$(jq -r '.loop.path_root // ".agents-work"' agentify.config.json 2>/dev/null)
+  state_root="${state_root:-.agents-work}"
+  if [ -f "./AGENTIFY.md" ]; then
+    target_dir="."
+  elif [ -f "plugins/agentify/AGENTIFY.md" ]; then
+    target_dir="plugins/agentify"
+  else
+    echo "state_init: ERROR: cannot locate AGENTIFY.md" >&2
+    return 2
+  fi
+  mkdir -p "$state_root/revisions" "$state_root/reviews"
+  if [ ! -f "$state_root/loop-state.json" ]; then
+    cat > "$state_root/loop-state.json" <<EOF
 {
   "iteration": 0,
   "max_iterations": 6,
   "session_id": "smoke-$(date -u +%s)",
   "started_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "agentify_md_sha": "$(sha256sum AGENTIFY.md | cut -d' ' -f1)",
+  "target_dir": "$target_dir",
+  "agentify_md_sha": "$(sha256sum "$target_dir/AGENTIFY.md" | cut -d' ' -f1)",
   "last_verdict": null,
   "last_counts": {"critical": 0, "major": 0, "moderate": 0, "strategic": 0, "polish": 0},
   "prev_counts": {"critical": 0, "major": 0, "moderate": 0, "strategic": 0, "polish": 0},
@@ -83,45 +78,90 @@ if [ ! -f "$state_root/loop-state.json" ]; then
   "latest_review_path": null
 }
 EOF
-fi
-cd "$REPO_ROOT"
+  fi
+}
+
+# Per-fixture assertions, keyed by expected mode.
+assert_state() {
+  local fixture="$1" expected_target_dir="$2" expected_sha="$3"
+  local state="$fixture/.agents-work/loop-state.json"
+  test -f "$state" && pass "[$expected_target_dir] loop-state.json initialized" \
+                   || ng "[$expected_target_dir] loop-state.json missing"
+  test -d "$fixture/.agents-work/revisions" && pass "[$expected_target_dir] revisions/ dir present" \
+                                            || ng "[$expected_target_dir] revisions/ missing"
+  test -d "$fixture/.agents-work/reviews" && pass "[$expected_target_dir] reviews/ dir present" \
+                                          || ng "[$expected_target_dir] reviews/ missing"
+  jq empty "$state" 2>/dev/null \
+    && pass "[$expected_target_dir] loop-state.json valid JSON" \
+    || ng "[$expected_target_dir] loop-state.json invalid JSON"
+
+  local f
+  for f in iteration max_iterations session_id target_dir agentify_md_sha last_verdict \
+           no_progress_streak regression_streak parked_findings; do
+    if jq -e --arg f "$f" 'has($f)' "$state" >/dev/null; then
+      pass "[$expected_target_dir] loop-state has .$f"
+    else
+      ng "[$expected_target_dir] loop-state missing .$f"
+    fi
+  done
+
+  local got_td got_sha got_iter
+  got_iter=$(jq '.iteration' "$state")
+  [ "$got_iter" = "0" ] && pass "[$expected_target_dir] iteration starts at 0" \
+                        || ng "[$expected_target_dir] iteration != 0 (got $got_iter)"
+  got_td=$(jq -r '.target_dir' "$state")
+  [ "$got_td" = "$expected_target_dir" ] && pass "[$expected_target_dir] target_dir matches" \
+                                         || ng "[$expected_target_dir] target_dir mismatch: got $got_td"
+  got_sha=$(jq -r '.agentify_md_sha' "$state")
+  [ "$got_sha" = "$expected_sha" ] && pass "[$expected_target_dir] agentify_md_sha matches" \
+                                   || ng "[$expected_target_dir] sha mismatch: got $got_sha"
+}
 
 echo
-echo "=== self-loop smoke: state assertions ==="
-test -f "$SELF/.agents-work/loop-state.json" && pass "loop-state.json initialized" \
-                                              || ng "loop-state.json missing"
-test -d "$SELF/.agents-work/revisions" && pass "revisions/ dir present" \
-                                       || ng "revisions/ missing"
-test -d "$SELF/.agents-work/reviews" && pass "reviews/ dir present" \
-                                     || ng "reviews/ missing"
+echo "=== self-loop smoke: scenario 1 — target mode (flat, ./AGENTIFY.md) ==="
+SELF="$TMP/target-fixture"
+mkdir -p "$SELF"
+cat >"$SELF/agentify.config.json" <<'EOF'
+{
+  "company": {"name": "agentify project"},
+  "skills": {"prefix": "agt"},
+  "plugin": {"name": "agentify"},
+  "loop": {"path_root": ".agents-work"}
+}
+EOF
+cp plugins/agentify/AGENTIFY.md "$SELF/AGENTIFY.md"
+TARGET_EXPECTED_SHA=$(sha256sum "$SELF/AGENTIFY.md" | cut -d' ' -f1)
+(cd "$SELF" && state_init)
+assert_state "$SELF" "." "$TARGET_EXPECTED_SHA"
 
-# Schema check.
-jq empty "$SELF/.agents-work/loop-state.json" 2>/dev/null \
-  && pass "loop-state.json valid JSON" \
-  || ng "loop-state.json invalid JSON"
+echo
+echo "=== self-loop smoke: scenario 2 — marketplace mode (plugins/agentify/AGENTIFY.md) ==="
+MKT="$TMP/marketplace-fixture"
+mkdir -p "$MKT/plugins/agentify"
+cat >"$MKT/agentify.config.json" <<'EOF'
+{
+  "company": {"name": "agentify project"},
+  "skills": {"prefix": "agt"},
+  "plugin": {"name": "agentify"},
+  "loop": {"path_root": ".agents-work"}
+}
+EOF
+cp plugins/agentify/AGENTIFY.md "$MKT/plugins/agentify/AGENTIFY.md"
+MKT_EXPECTED_SHA=$(sha256sum "$MKT/plugins/agentify/AGENTIFY.md" | cut -d' ' -f1)
+(cd "$MKT" && state_init)
+assert_state "$MKT" "plugins/agentify" "$MKT_EXPECTED_SHA"
 
-for f in iteration max_iterations session_id agentify_md_sha last_verdict \
-         no_progress_streak regression_streak parked_findings; do
-  if jq -e --arg f "$f" 'has($f)' "$SELF/.agents-work/loop-state.json" >/dev/null; then
-    pass "loop-state has .$f"
-  else
-    ng "loop-state missing .$f"
-  fi
-done
-
-iteration=$(jq '.iteration' "$SELF/.agents-work/loop-state.json")
-[ "$iteration" = "0" ] && pass "iteration starts at 0" || ng "iteration != 0 (got $iteration)"
-
-actual_sha=$(jq -r '.agentify_md_sha' "$SELF/.agents-work/loop-state.json")
-[ "$actual_sha" = "$EXPECTED_SHA" ] && pass "agentify_md_sha matches" \
-                                    || ng "sha mismatch: got $actual_sha, expected $EXPECTED_SHA"
+# Keep SELF as the active fixture for the back-compat status/stop sections
+# below — they were originally written against target mode and still apply.
 
 echo
 echo "=== self-loop smoke: simulate /agt-loop status ==="
-status_output=$(jq '{iteration, max_iterations, session_id, last_verdict}' \
+status_output=$(jq '{iteration, max_iterations, session_id, target_dir, last_verdict}' \
                 "$SELF/.agents-work/loop-state.json")
 echo "$status_output" | grep -q 'iteration' && pass "status returns parseable summary" \
                                             || ng "status output malformed"
+echo "$status_output" | grep -q 'target_dir' && pass "status surfaces target_dir" \
+                                             || ng "status output missing target_dir"
 
 echo
 echo "=== self-loop smoke: simulate /agt-loop stop (idempotency check) ==="
@@ -135,7 +175,8 @@ cat > "$session_summary" <<EOF
 **Last counts:** critical=0 major=0 moderate=0 strategic=0 polish=0
 **No-progress streak:** 0
 **Parked findings:** none
-**AGENTIFY.md sha256:** $EXPECTED_SHA
+**Target dir:** .
+**AGENTIFY source:** ./AGENTIFY.md (sha256: $TARGET_EXPECTED_SHA)
 
 This file is overwritten each iteration so a compacted parent can resume.
 The authoritative state is .agents-work/loop-state.json.
