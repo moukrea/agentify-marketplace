@@ -1,11 +1,12 @@
 {
-  "generated_at": "2026-05-14T20:38:07Z",
+  "generated_at": "2026-05-15T08:51:47Z",
   "total": 14,
   "by_severity": {
     "critical": 1,
-    "info": 4,
+    "info": 5,
     "major": 2,
-    "moderate": 7
+    "moderate": 5,
+    "polish": 1
   },
   "by_category": {
     "bug": 1,
@@ -13,8 +14,8 @@
     "doc-gap": 1,
     "feedback-recurring": 1,
     "manifest-drift": 1,
-    "meta": 4,
-    "practice-drift": 4
+    "meta": 5,
+    "practice-drift": 3
   },
   "recurring": [],
   "open_synthetic_findings": 14
