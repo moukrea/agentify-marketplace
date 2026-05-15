@@ -103,6 +103,25 @@ If you cannot construct a passing verification, the finding is NOT Applied. Use 
 
 The iter-5 reviser tested `python3 -c '<inline-script>'` (the review's §9.1 Option A, correct form) but deployed `python3 - <<'PY' ... PY` (Option 3, broken heredoc form). Both options were in the review; the verification command targeted the wrong one. Lesson: **the verification command and the deployed code must come from the same place**. Either source the file you just wrote and call the function the same way the deployed call site does, or copy the verification command from the deployed code's call site (e.g., from `replay.sh`'s actual driver line) and run it. Never test "what I think the code should look like." Test the bytes that just hit disk.
 
+## Cross-section consistency gate — required before marking any value-changing finding "Applied"
+
+Three iterations of this loop have introduced new Major / Moderate defects via the same pattern: the reviser changed a value (a version number in the H1 bump, a helper count like "39 §8 checks", a pointer phrase like "see §12.6 wrapper note") in the section the review named, but left the value's *other* mentions across `${target_dir:-.}/AGENTIFY.md` untouched. The reviewer's prior-revision cross-check catches the drift and flags `caused_by_prior_revise: true`, accelerating the loop's REGRESSION exit. Examples observed: iter-02 left a "wrapper note" pointer in §5.5 #12 after §12.6 retracted the wrapper claim, and a `wrapper`-framing line in the Acknowledgements; iter-03 enumerated `(v3.8, v6.0, v6.1, v6.2)` in §12.16 but left §7.7 at `(v3.8, v6.0, v6.1)`.
+
+For every finding that changes a value, name, count, or pointer that appears in more than one place in the prompt, before claiming **Applied**:
+
+1. **Site-grep.** Grep `${target_dir:-.}/AGENTIFY.md` for every other mention of the value being changed. Pick the pattern that matches the change class:
+   - Version numbers in enumerations / regex literals: `grep -nE '\(v[0-9]+\.[0-9]+(, v[0-9]+\.[0-9]+)*\)' "${target_dir:-.}/AGENTIFY.md"`
+   - Helper counts: `grep -nE '"?[0-9]+ §8|HELPER_SLOTS|30 \+ [0-9]+' "${target_dir:-.}/AGENTIFY.md"`
+   - Section pointers, wrapper/note phrasing: `grep -nE 'see §[0-9]+|wrapper note|wrapper claim|wrapper-framing' "${target_dir:-.}/AGENTIFY.md"`
+   - Generic literal-string change: `grep -nE '<old-token>' "${target_dir:-.}/AGENTIFY.md"` for whatever string is being replaced.
+2. **Update every site, not just the one the review named.** A finding that calls out §12.4 but whose value also lives in §5.5 and §13 has three sites to update, not one. The review's patch list is a starting point; the site-grep is authoritative.
+3. **Cite the grep in a `**Verification:**` block.** The verification block records the post-edit grep so the reviewer can re-run it: ``Command `grep -cE '<pattern>' "${target_dir:-.}/AGENTIFY.md"`; stdout `<post-edit count>`; Exit code 0`` and the post-edit count must reflect every site being updated to the new value (or explicitly preserved with a documented reason).
+4. **Decide intentional staleness explicitly.** If a site exists that you decide NOT to update — historical patch-log entries inside `${target_dir:-.}/PATCH_LOG.md`, archived examples that document the old value, sunset annotations — document the reason in the Verification block one-line. Silent preservation reads as drift.
+
+Cross-section findings without a site-grep Verification block are NOT Applied. Use **Partially applied** with the grep output proving the remaining stale sites, or **Not applied** with a justification. The reviewer will re-execute the same site-grep on the next iteration and flag any remaining staleness as `caused_by_prior_revise: true`.
+
+**Do NOT bump the H1 version marker (`# AGENTIFY — ... (vN.M)`) inside a loop iteration.** Per `LOOP_PROMPT.md` §G, the H1 bump is a human responsibility after a `DONE` exit, consolidating accumulated revisions into a `## Patch log — vN to vN+1` section. The H1 is also load-bearing for the dogfood `plugin.json + marketplace.json + AGENTIFY.md H1 lockstep` test, which validates that the H1's `vN.M` equals the major.minor of `plugins/agentify/.claude-plugin/plugin.json`'s `.version`. Bumping the H1 mid-loop breaks that lockstep and breaks CI. Internal version-marker strings that track the H1 (e.g., `# AGENTIFY prepare-commit-msg vN.M`, example commit subjects in §9) also stay at the current released version; uninstall-regex enumerations (e.g., `(v3.8, v6.0, v6.1, ...)`) can be forward-compat extended without bumping the H1.
+
 ## Output structure
 
 Produce two artifacts. When run inside the loop (LOOP_PROMPT.md spawns you with an iteration number `NN`), write them to files in the order given below; the loop parent reads the JSON contract at the bottom of your reply to advance state. When run standalone (a human pastes you directly without going through the loop), produce both as inline Markdown in your reply and skip the file writes.
@@ -155,6 +174,7 @@ Before producing the final document, audit your own work:
 6. No invented sources. Every URL cited in the new prompt was either in the input prompt, in the review, or in your verified search results.
 7. Length is plausible. Removing 200 lines from AGENTS.md and adding a plansDirectory subsystem and a Stop-hook loop and a sandbox block roughly balances. If the new prompt is dramatically shorter, you probably dropped something. If dramatically longer, you probably added scope creep.
 8. Every Applied finding that touches executable code carries a `**Verification:**` sub-bullet with command, stdout, and exit code per the Runtime verification gate. The command exercises the deployed call shape (not an isolated REPL invocation). If any code-bearing Applied lacks proof, downgrade to Partially applied with the failing verification, or to Not applied with the breaking verification. Do not ship the iteration with an unverified Applied claim — the reviewer will catch it next pass and the loop will fire REGRESSION.
+9. Every Applied finding that changes a value, name, count, or pointer carries a site-grep `**Verification:**` sub-bullet per the Cross-section consistency gate, and the post-edit count reflects every site updated to the new value (or explicitly preserved with a one-line reason). The H1 version bump alone has at least three known sites — the H1 itself, the §12.16 / §10 uninstall regex enumeration of supported versions, and any §7.x backfill-format references; all three must move in lockstep. Stale cross-section sites are the dominant `caused_by_prior_revise` class observed in this loop's history.
 
 If the audit surfaces a problem, fix it before output, not after.
 
