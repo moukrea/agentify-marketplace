@@ -1,5 +1,10 @@
-# .claude/hooks/_lib.sh — shared by every hook script.
-# Source via: . "${CLAUDE_PROJECT_DIR}/.claude/hooks/_lib.sh"
+# plugins/agentify/hooks/_lib.sh — shared by every hook script in this dir.
+# Source via the script-relative form so the hook works in all install modes
+# (plugin-installed, fully /agentify-scaffolded, manual invocation):
+#   . "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+# The target-side .claude/hooks/_lib.sh authored by /agentify Phase 0 is a
+# SEPARATE file (it ends up in a scaffolded target's repo) — those hooks
+# source their own target-side _lib.sh by the same script-relative pattern.
 
 resolve_path() {
   if realpath -m / >/dev/null 2>&1; then

@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
-. "${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/hooks/_lib.sh"
+# Source the plugin's own _lib.sh (ships next to this script). Target-side
+# _lib.sh at ${CLAUDE_PROJECT_DIR}/.claude/hooks/ is a separate file authored
+# by /agentify Phase 0 and only exists in fully-scaffolded targets — sourcing
+# it here broke the hook when the plugin runs in the marketplace itself, in
+# any plugin-installed-but-not-scaffolded repo, or from manual invocation.
+# shellcheck source=_lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 
 # Resolve relative file_path against the project root, not the hook's cwd.
 # `2>/dev/null` swallows the unlikely cd failure; the subsequent git rev-parse
