@@ -82,6 +82,7 @@ Per AGENTIFY.md §5.7's "augment, don't clone" principle:
 ## Working conventions
 
 - **Commits:** Conventional Commits (`feat(agt-loop): ...`, `fix(...): ...`). The `conventional-commit.sh` PreToolUse hook enforces format.
+- **Pull requests:** every change ships via a feature branch + PR per [`CONTRIBUTING.md` §Pull-request workflow](CONTRIBUTING.md#pull-request-workflow) — squash-merge, never direct-to-`main`. This applies to loop output too: an `/agt-loop` session that exits for any reason (DONE / PARKED / REGRESSION / STALLED / BUDGET_EXHAUSTED) lands its working-tree changes via PR, not by pushing the branch the loop ran on. `plugins/agentify/LOOP_PROMPT.md` §E exit summary reiterates this per exit reason.
 - **Versioning:** AGENTIFY.md H1 carries the active version, `(vX.Y)`. Plugin metadata (`plugins/agentify/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`) is bumped in lockstep on every release.
 - **Smoke before commit:** for any change touching rendering, hooks, or the loop, run the relevant smoke script:
   - `bash bin/test-de-spec-smoke.sh` (placeholder substitution)

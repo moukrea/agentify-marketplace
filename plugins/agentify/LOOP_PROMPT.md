@@ -470,6 +470,14 @@ ${target_dir}/context/):
   - ...
 
 Suggested next step:
+  ALL              → any working-tree changes the loop produced (typically
+                     ${target_dir}/AGENTIFY.md, ${target_dir}/PATCH_LOG.md,
+                     ${target_dir}/context/) land via a feature branch + PR —
+                     squash-merge, never direct-to-main. In this marketplace
+                     repo, see CONTRIBUTING.md §Pull-request workflow; in
+                     scaffolded targets, follow the target's own contribution
+                     policy. The exit-reason-specific guidance below describes
+                     the conceptual action; the PR is how it lands.
   DONE             → consolidate ${state_root}/revisions/* into ${target_dir}/PATCH_LOG.md
                      as the next versioned section and bump ${target_dir}/AGENTIFY.md's
                      H1 version tag.
