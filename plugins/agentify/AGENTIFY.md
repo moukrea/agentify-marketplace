@@ -1,4 +1,4 @@
-# AGENTIFY — Bootstrap a production-grade agentic harness on any repository (v6.2)
+# AGENTIFY — Bootstrap a production-grade agentic harness on any repository (v6.0)
 
 > Paste this file as the first prompt of a fresh Claude Code session at the root of the repository you want to agentify. Start with `--permission-mode plan` so the native plan-approval flow runs at the end of Phase 1.
 
@@ -1844,7 +1844,7 @@ Write results to `.agents-work/bootstrap-verify.md`, one line per check, pass/fa
 `/{__AGT_SKILL_PREFIX__}-commit` produces:
 
 ```
-chore(harness): bootstrap agentic harness v6.2
+chore(harness): bootstrap agentic harness v6.0
 
 Detected stack: <languages/frameworks>.
 CI release flow: <semantic-release | release-please | changesets | manual | none>.
@@ -3085,11 +3085,11 @@ exit 0
 
 ### 12.16 `.git/hooks/prepare-commit-msg` (installed by `init.sh`)
 
-Same regex as §12.4 (cookbook form, mixed-case scope authorized). First-line marker `# AGENTIFY prepare-commit-msg v6.2` so `init.sh --uninstall` can fingerprint it. The marker version tracks the AGENTIFY.md H1 version so a future uninstall pass can grep all generations (v3.8, v6.0, v6.1, v6.2) via the version-tolerant regex `^# AGENTIFY prepare-commit-msg v[0-9]` (§7.7 closes review 02 P4); closes review 01 Polish #5.
+Same regex as §12.4 (cookbook form, mixed-case scope authorized). First-line marker `# AGENTIFY prepare-commit-msg v6.0` so `init.sh --uninstall` can fingerprint it. The marker version tracks the AGENTIFY.md H1 version so a future uninstall pass can grep all generations (v3.8, v6.0, v6.1, v6.2) via the version-tolerant regex `^# AGENTIFY prepare-commit-msg v[0-9]` (§7.7 closes review 02 P4); closes review 01 Polish #5.
 
 ```bash
 #!/usr/bin/env bash
-# AGENTIFY prepare-commit-msg v6.2
+# AGENTIFY prepare-commit-msg v6.0
 # Catches editor-mode commits that bypass the conventional-commit.sh PreToolUse hook.
 # Installed by scripts/init.sh.
 set -euo pipefail

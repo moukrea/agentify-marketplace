@@ -120,6 +120,8 @@ For every finding that changes a value, name, count, or pointer that appears in 
 
 Cross-section findings without a site-grep Verification block are NOT Applied. Use **Partially applied** with the grep output proving the remaining stale sites, or **Not applied** with a justification. The reviewer will re-execute the same site-grep on the next iteration and flag any remaining staleness as `caused_by_prior_revise: true`.
 
+**Do NOT bump the H1 version marker (`# AGENTIFY — ... (vN.M)`) inside a loop iteration.** Per `LOOP_PROMPT.md` §G, the H1 bump is a human responsibility after a `DONE` exit, consolidating accumulated revisions into a `## Patch log — vN to vN+1` section. The H1 is also load-bearing for the dogfood `plugin.json + marketplace.json + AGENTIFY.md H1 lockstep` test, which validates that the H1's `vN.M` equals the major.minor of `plugins/agentify/.claude-plugin/plugin.json`'s `.version`. Bumping the H1 mid-loop breaks that lockstep and breaks CI. Internal version-marker strings that track the H1 (e.g., `# AGENTIFY prepare-commit-msg vN.M`, example commit subjects in §9) also stay at the current released version; uninstall-regex enumerations (e.g., `(v3.8, v6.0, v6.1, ...)`) can be forward-compat extended without bumping the H1.
+
 ## Output structure
 
 Produce two artifacts. When run inside the loop (LOOP_PROMPT.md spawns you with an iteration number `NN`), write them to files in the order given below; the loop parent reads the JSON contract at the bottom of your reply to advance state. When run standalone (a human pastes you directly without going through the loop), produce both as inline Markdown in your reply and skip the file writes.
