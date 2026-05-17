@@ -15,6 +15,67 @@ Commits since the most recent `vX.Y.Z` tag; do not edit manually
 unless you intend to override the auto-derivation (and add an explicit
 note here saying so)._
 
+## [agentify 6.1.0] — 2026-05-17
+
+This is the v6.0.0 → v6.1.0 non-breaking release. See
+[`plugins/agentify/migrations/v6.0.0-to-v6.1.0.md`](plugins/agentify/migrations/v6.0.0-to-v6.1.0.md)
+for the (zero-touch) operator walkthrough. The release consolidates
+five iterations of the in-session AGENTIFY revise/review loop (iter-02
+through iter-06) plus a manual closure pass into a stable, shippable
+prompt body — changes are prompt-internal, no harness behavior shifts.
+
+### Changed
+
+- **AGENTIFY.md**: §10 anti-pattern catalog gains an explicit
+  enumeration rule covering "every §5 hook description, every §8
+  verification check, every §10 anti-pattern, every §12 implementation,
+  every §Acknowledgements citation" and a new "drive the enumeration
+  from a phrase-based site-grep against the prior wording, not from the
+  finding's named sites" instruction — the M-doc-drift discipline that
+  iter-06's REGRESSION exit motivated. §8 #14f cross-section
+  approve-shape detector and §8 #35 count-consistency helper are
+  unchanged; the rule above them is now load-bearing.
+- **AGENTIFY.md**: cross-section sentinel prose (§5.1 / §5.4 / §5.5
+  #18 / §5.9 / §6.4 / §6.5 / §8 #30 / §8 #30b / §12.14 / §12.20 / §12.22)
+  now names BOTH `$(git rev-parse --git-common-dir)/.loop-overlay-active`
+  AND `${CLAUDE_PROJECT_DIR}/.agents-work/.loop-overlay-active` at every
+  prose site. The §12.20 `merge-and-revert.sh revert` body removes both
+  sentinels; the §12.22 check short-circuits on the first present.
+- **AGENTIFY.md**: §10 "CPD scoping invariants" forwarding pointer
+  switched from line-number cite (drift-prone) to grep-anchor form
+  (`^    # rationale at §10` returns exactly one match — drift-resistant
+  across future inserts above §12.4). §10 self-history paragraph trimmed
+  to a parenthetical pointing at `.agents-work/reviews/` for the
+  iteration trail.
+- **REVISE_AGENTIFY_PROMPT.md**: §Cross-section consistency gate step 1
+  gains an explicit M-doc-drift bullet with a `\.loop-overlay-active`
+  worked example for the dual-sentinel fix. Step 5 (forward-pointer
+  resolvability) and the H1 lockstep guidance are unchanged.
+- **§12.16 prepare-commit-msg marker**: bumped from `v6.0` to `v6.1` in
+  lockstep with the H1; the version-tolerant uninstall regex
+  (`^# AGENTIFY prepare-commit-msg v[0-9]`) catches every historical
+  and forward-compat marker.
+
+### Fixed
+
+- **iter-02 through iter-06 closures**: M1 sentinel-cleanup in
+  `merge-and-revert.sh revert` (closed iter-05 M1); §12.13 schema-test
+  path-join separator hardened from `tostring` to `tojson` so numeric
+  string keys no longer collide with array indices; defensive
+  `${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null
+  || pwd)}` form applied at §14d / §14e / §14f / §35; six bare-CPD
+  sites converted at the helper template layer.
+
+### Verified at release
+
+- Fresh-state loop run iter-01 (under `max_iterations=3`) returned
+  verdict `ship` with `0/0/0/0/0` counts and `caused_by_prior_revise: 0`
+  on the post-merge AGENTIFY.md (`.agents-work/reviews/01-20260517-124117.md`).
+  The M-doc-drift discipline test passed: zero new regressions
+  introduced under independent fresh-context review. The 3-iteration
+  budget concept (down from 6) was vetted; convergence in 1 iteration
+  validated the tighter ceiling.
+
 ## [agentify 6.0.0] — 2026-05-14
 
 This is the v5.0.0 → v6.0.0 BREAKING release. See

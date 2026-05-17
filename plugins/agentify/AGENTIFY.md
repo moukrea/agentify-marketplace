@@ -1,4 +1,4 @@
-# AGENTIFY — Bootstrap a production-grade agentic harness on any repository (v6.0)
+# AGENTIFY — Bootstrap a production-grade agentic harness on any repository (v6.1)
 
 > Paste this file as the first prompt of a fresh Claude Code session at the root of the repository you want to agentify. Start with `--permission-mode plan` so the native plan-approval flow runs at the end of Phase 1.
 
@@ -1632,7 +1632,7 @@ The harness is a bridge to Anthropic Managed Agents. When parity arrives (~12 mo
 
 1. Removes `.claude/skills/{__AGT_SKILL_PREFIX__}-*/`, `.claude/agents/{sibling-scout,quality-reviewer,tester,committer}.md`, `.claude/hooks/` (project-scope hooks installed by the harness).
 2. Optionally removes `.agents-work/` after archiving `progress.md` and `acceptance.json` to `documentation/handoff/<date>-final.md` so the historical record survives.
-3. Removes `.git/hooks/prepare-commit-msg` if it matches the harness fingerprint. The uninstall regex is the version-tolerant form `^# AGENTIFY prepare-commit-msg v[0-9]` so all four internal lineage markers (v3.8, v6.0, v6.1, v6.2) are caught and removed on the same pass — closes review 02 P4 (the v6.1 prose mentioned only the generic `vN` placeholder and missed enumeration of the lineages) and closes review 03 Mo1 (iter-03's internal-iteration bump updated §12.16's enumeration but missed §7.7's; both sites now enumerate the same four markers and future bumps must re-grep both per the §10 count/identifier-drift bullet). v6.1 and v6.2 are loop-internal iteration markers — they have not shipped as released documents (the H1 remains at v6.0; same iteration-vs-release disambiguation as the §10 "v3.7 (not Claude Code version)" pattern); the enumeration carries them so the uninstall regex is forward-compat with any prepare-commit-msg header that future iterations stamped during a development pass. Closes review 04 P3. New lineages added in future iterations need only follow the `# AGENTIFY prepare-commit-msg v<digit>` shape and the uninstall regex catches them automatically.
+3. Removes `.git/hooks/prepare-commit-msg` if it matches the harness fingerprint. The uninstall regex is the version-tolerant form `^# AGENTIFY prepare-commit-msg v[0-9]` so every historical lineage marker is caught and removed on the same pass — historical stamps include v3.8 (pre-v6 series), v6.0 (initial v6 series), and v6.1 (current H1 after the v6.0.0 → v6.1.0 release); forward-compat covers any v6.N / v7.N marker future H1 bumps may stamp. Closes review 02 P4 (the prior prose mentioned only the generic `vN` placeholder and missed enumeration of the lineages) and review 03 Mo1 (iter-03's internal-iteration bump updated §12.16's enumeration but missed §7.7's; both sites enumerate consistently and future bumps must re-grep both per the §10 count/identifier-drift bullet). Loop-internal iter counters (v6.1 → v6.5 in `PATCH_LOG.md`) are not stamped as prepare-commit-msg markers — they live in the patch log per the §10 iteration-vs-release disambiguation pattern, same as the "v3.7 (not Claude Code version)" framing. Closes review 04 P3. New lineages added in future H1 bumps need only follow the `# AGENTIFY prepare-commit-msg v<digit>` shape and the uninstall regex catches them automatically.
 4. Removes `MAINTAINERS.md` only if explicitly passed `--remove-maintainers` (it may be hand-maintained).
 5. Prints a Managed-Agents registration guide pointing at the company's deployment runbook.
 
@@ -3157,11 +3157,11 @@ exit 0
 
 ### 12.16 `.git/hooks/prepare-commit-msg` (installed by `init.sh`)
 
-Same regex as §12.4 (cookbook form, mixed-case scope authorized). First-line marker `# AGENTIFY prepare-commit-msg v6.0` so `init.sh --uninstall` can fingerprint it. The marker version tracks the AGENTIFY.md H1 version so a future uninstall pass can grep all internal iteration markers (v3.8, v6.0, v6.1, v6.2) via the version-tolerant regex `^# AGENTIFY prepare-commit-msg v[0-9]`. v6.1 and v6.2 are loop-internal markers (the H1 remains at v6.0); the enumeration covers any header future iterations may stamp during a development pass — same iteration-vs-release disambiguation as the §10 "v3.7 (not Claude Code version)" pattern (§7.7 closes review 02 P4 and review 04 P3); closes review 01 Polish #5.
+Same regex as §12.4 (cookbook form, mixed-case scope authorized). First-line marker `# AGENTIFY prepare-commit-msg v6.1` so `init.sh --uninstall` can fingerprint it. The marker version tracks the AGENTIFY.md H1 major.minor; the version-tolerant regex `^# AGENTIFY prepare-commit-msg v[0-9]` catches every historical and forward-compat marker (v3.8 pre-v6 series, v6.0 initial v6 release, v6.1 current H1, and any v6.N / v7.N future bump) without prose updates. Loop-internal iter counters (the prompt-internal v6.1 → v6.5 lineage marked in `PATCH_LOG.md`) are not stamped as prepare-commit-msg markers — they live in the patch log per the §10 iteration-vs-release disambiguation pattern. Closes review 02 P4 + review 04 P3 + review 01 Polish #5; the enumeration regex is forward-compat.
 
 ```bash
 #!/usr/bin/env bash
-# AGENTIFY prepare-commit-msg v6.0
+# AGENTIFY prepare-commit-msg v6.1
 # Catches editor-mode commits that bypass the conventional-commit.sh PreToolUse hook.
 # Installed by scripts/init.sh.
 set -euo pipefail
