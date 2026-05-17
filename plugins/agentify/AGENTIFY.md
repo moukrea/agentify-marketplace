@@ -679,7 +679,7 @@ Seed:
 
 **`.agents-work/.macos-notice-shown`** — cookie file written by §12.5 to suppress the macOS notice on subsequent SessionStart invocations.
 
-**`.agents-work/.loop-overlay-active`** — sentinel file written synchronously by the loop overlay's SessionStart hook (§12.14) and read by `loop-overlay-check.sh` (§12.22). Removed by `/{__AGT_SKILL_PREFIX__}-loop stop` and `merge-and-revert.sh revert`.
+**`.agents-work/.loop-overlay-active`** — sentinel file written synchronously by the loop overlay's SessionStart hook (§12.14). The hook actually touches two locations: `$(git rev-parse --git-common-dir)/.loop-overlay-active` (worktree-shared; see §6.5 for the rationale) AND `${CLAUDE_PROJECT_DIR}/.agents-work/.loop-overlay-active` (project-dir fallback for non-git directories). `loop-overlay-check.sh` (§12.22) reads both — either present means "active". Both locations are removed by `/{__AGT_SKILL_PREFIX__}-loop stop` and `merge-and-revert.sh revert` (§12.20 `revert` mode calls `rm -f` on both paths; closes review 05 M1 cross-section drift between §12.20 script body and §6.5/§5.1/§5.9 prose).
 
 Gitignore `.agents-work/tmp/`, `.agents-work/*.scratch.*`, `.agents-work/loop-logs/`, `.agents-work/state.local.json`, `.agents-work/.macos-notice-shown`, `.agents-work/.loop-overlay-active`.
 
@@ -1330,7 +1330,7 @@ All scripts `cd` to the worktree root via `git rev-parse --show-toplevel`. All a
 
 `.claude/settings.loop.json` (committed) is layered on top of base settings when `/{__AGT_SKILL_PREFIX__}-loop start` activates. The skill prefers `claude --settings .claude/settings.loop.json` and falls back to `scripts/merge-and-revert.sh apply` (§12.20) when `--settings` is unsupported. The overlay covers **both** the sandbox layer (Bash) and the WebFetch permission rules — the sandbox `allowedDomains` does not govern the WebFetch tool on its own.
 
-The overlay's `hooks.SessionStart` block writes only the sentinel file `.agents-work/.loop-overlay-active` synchronously. No environment variables are written. The §5.5 #18 check (`loop-overlay-check.sh`) reads the sentinel — env-var detection was tried in an earlier draft (`EG_LOOP_OVERLAY=1` via `$CLAUDE_ENV_FILE`) but `CLAUDE_ENV_FILE` writes from a sibling SessionStart hook are not visible inside the same SessionStart batch (`context/claude-code-mechanics.md#hooks`); the env-file sources before *subsequent* Bash, not before sibling hooks. The vestigial env-var write was dropped in v3.6 because it had no consumer and risked re-introducing the same-batch race the sentinel design closed. The sentinel is removed by `/{__AGT_SKILL_PREFIX__}-loop stop` and `merge-and-revert.sh revert`. Add it to `.gitignore` alongside `.macos-notice-shown`.
+The overlay's `hooks.SessionStart` block writes the sentinel synchronously to **two** locations: `$(git rev-parse --git-common-dir)/.loop-overlay-active` (worktree-shared per §6.5) AND `${CLAUDE_PROJECT_DIR}/.agents-work/.loop-overlay-active` (project-dir fallback). No environment variables are written. The §5.5 #18 check (`loop-overlay-check.sh`) reads both locations — either present means active. Env-var detection was tried in an earlier draft (`EG_LOOP_OVERLAY=1` via `$CLAUDE_ENV_FILE`) but `CLAUDE_ENV_FILE` writes from a sibling SessionStart hook are not visible inside the same SessionStart batch (`context/claude-code-mechanics.md#hooks`); the env-file sources before *subsequent* Bash, not before sibling hooks. The vestigial env-var write was dropped in v3.6 because it had no consumer and risked re-introducing the same-batch race the sentinel design closed. Both sentinel locations are removed by `/{__AGT_SKILL_PREFIX__}-loop stop` and `merge-and-revert.sh revert` (§12.20 `revert` mode rm -fs both paths; closes review 05 M1). Add the sentinel filename to `.gitignore` alongside `.macos-notice-shown`.
 
 Drop-in in §12.14. Adds:
 
@@ -1527,7 +1527,7 @@ allowed-tools: "Bash(jq:*), Bash(./scripts/merge-and-revert.sh:*), Read, Write, 
 3. Prints the loop prompt to stdout.
 4. Prints the relaunch instruction: prefer `claude --settings .claude/settings.loop.json`; if that flag is not recognized by the installed Claude Code version, fall back to `./scripts/merge-and-revert.sh apply` and relaunch normally.
 
-`/{__AGT_SKILL_PREFIX__}-loop stop`: deletes loop-state.json, removes `.agents-work/.loop-overlay-active`, and runs `./scripts/merge-and-revert.sh revert` (no-op if `apply` was never called). Re-invoking `/{__AGT_SKILL_PREFIX__}-loop start` without an intervening `stop` now errors loudly from `merge-and-revert.sh apply` (per §12.20 invariant 1) instead of silently overwriting the backup with the merged settings — the v3.6 path that bricked interactive permissions when `start` was retried after a partial failure is closed.
+`/{__AGT_SKILL_PREFIX__}-loop stop`: deletes loop-state.json, runs `./scripts/merge-and-revert.sh revert` (no-op if `apply` was never called; per the iter-06 M1 fix the `revert` mode is the single source of truth for sentinel cleanup — removes both `${CLAUDE_PROJECT_DIR}/.agents-work/.loop-overlay-active` AND `$(git rev-parse --git-common-dir)/.loop-overlay-active`). Re-invoking `/{__AGT_SKILL_PREFIX__}-loop start` without an intervening `stop` now errors loudly from `merge-and-revert.sh apply` (per §12.20 invariant 1) instead of silently overwriting the backup with the merged settings — the v3.6 path that bricked interactive permissions when `start` was retried after a partial failure is closed.
 
 `/{__AGT_SKILL_PREFIX__}-loop reset`: edits `state.json` to set `current_phase = "idle"` and `current_work.blocked_on = null`. Used to escape a stale `done` or `blocked` state from a previous loop. The skill's `allowed-tools` includes `Edit(./.agents-work/state.json)` so the edit doesn't prompt.
 
@@ -1696,7 +1696,8 @@ exit 0
 # AGENTIFY check — production verification ready to deploy. The body below IS
 # the real verification: it pipes 12 documented dangerous patterns through the
 # deployed guard-bash.sh and asserts each is blocked. Do not delete as a stub.
-HOOK="${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-bash.sh"
+CPD="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"  # closes review 05 P3 — defensive CPD consistent with §12.2/§12.5/§12.10/§12.22
+HOOK="$CPD/.claude/hooks/guard-bash.sh"
 [ -x "$HOOK" ] || { echo "stub: guard-bash.sh not installed; skipping"; exit 0; }
 fail=0
 # Fork-bomb whitespace variants close review 01 Mo5. Synthesized via printf so
@@ -1731,10 +1732,11 @@ exit "$fail"
 # the real verification: creates a fresh .md under ~/.claude/plans/, runs
 # sweep-plans.sh, and asserts the file appeared under .agents-work/plans/. Do
 # not delete as a stub.
-HOOK="${CLAUDE_PROJECT_DIR}/.claude/hooks/sweep-plans.sh"
+CPD="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"  # closes review 05 P3 — defensive CPD consistent with §12.2/§12.5/§12.10/§12.22
+HOOK="$CPD/.claude/hooks/sweep-plans.sh"
 [ -x "$HOOK" ] || { echo "stub: sweep-plans.sh not installed; skipping"; exit 0; }
 SRC="${HOME}/.claude/plans"
-DST="${CLAUDE_PROJECT_DIR}/.agents-work/plans"
+DST="$CPD/.agents-work/plans"
 mkdir -p "$SRC" "$DST"
 SENTINEL="14e-smoke-$$.md"
 echo "# 14e smoke" > "$SRC/$SENTINEL"
@@ -1759,7 +1761,8 @@ fi
 # 14f: AGENTIFY.md does not document the deprecated Stop allow-shape
 # outside of anti-pattern citations. AGENTIFY-CHECK-14F-SELF
 # AGENTIFY check — production verification ready to deploy. Do not delete as a stub.
-AGENTIFY="${CLAUDE_PROJECT_DIR}/AGENTIFY.md"
+CPD="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"  # closes review 05 P3 — defensive CPD consistent with §12.2/§12.5/§12.10/§12.22
+AGENTIFY="$CPD/AGENTIFY.md"
 [ -f "$AGENTIFY" ] || { echo "stub: AGENTIFY.md not found; skipping"; exit 0; }
 # Match the deprecated JSON shape and the deprecated "approve-on-malformed ...
 # wrapper" wording. The 2nd alternation requires the word `wrapper` within 40
@@ -1834,6 +1837,34 @@ exit 0
 29. **For every custom skill, AGENTS.md `<native_primitives_policy>` and the skill's own description name the native primitive it augments, or state "no native equivalent".**
 30. **Loop overlay check**: with `loop-state.json` present and the sentinel `.agents-work/.loop-overlay-active` absent, `loop-overlay-check.sh` prints a stderr warning at SessionStart. With the sentinel present, the warning is suppressed. With `EG_LOOP_CHECK_QUIET=1`, suppressed regardless. Additionally: `git push --force-with-lease` is blocked by `guard-bash.sh`. Additionally: after `/{__AGT_SKILL_PREFIX__}-loop reset`, `state.json.current_work.blocked_on == null` and `state.json.current_phase == "idle"`.
 
+30b. **Loop overlay sentinel cleanup on `/loop stop`** (closes review 05 M1): after `/{__AGT_SKILL_PREFIX__}-loop stop` (which delegates sentinel cleanup to `merge-and-revert.sh revert` per §6.4 / §12.20), BOTH sentinel locations MUST be absent: `${CLAUDE_PROJECT_DIR}/.agents-work/.loop-overlay-active` AND `$(git rev-parse --git-common-dir)/.loop-overlay-active`. If either persists, the next SessionStart in any worktree reads the stale sentinel and §5.5 #18 silently passes — the operator sees no signal that the loop sandbox + WebFetch deny rules are missing. The check pipes the post-stop file presence through a `[ ! -f X ] && [ ! -f Y ]` test and asserts exit 0. Regression target if §12.20 `revert` mode loses its sentinel-cleanup block. Helper template:
+
+```bash
+#!/usr/bin/env bash
+# 30b: post-/loop stop, both sentinel locations are absent
+# AGENTIFY check — production verification ready to deploy. Do not delete as a stub.
+CPD="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+PROJ_SENT="$CPD/.agents-work/.loop-overlay-active"
+GIT_COMMON=$(git -C "$CPD" rev-parse --git-common-dir 2>/dev/null || echo "")
+COMMON_SENT=""; [ -n "$GIT_COMMON" ] && COMMON_SENT="$GIT_COMMON/.loop-overlay-active"
+# Only meaningful AFTER a /loop stop has run; SKIPs if loop-state.json is still present.
+if [ -f "$CPD/.agents-work/loop-state.json" ]; then
+  echo "stub: loop-state.json still present; run /{__AGT_SKILL_PREFIX__}-loop stop first; skipping"
+  exit 0
+fi
+fail=0
+if [ -f "$PROJ_SENT" ]; then
+  echo "30b: project-dir sentinel persists at $PROJ_SENT after /loop stop" >&2
+  fail=1
+fi
+if [ -n "$COMMON_SENT" ] && [ -f "$COMMON_SENT" ]; then
+  echo "30b: git-common-dir sentinel persists at $COMMON_SENT after /loop stop" >&2
+  fail=1
+fi
+[ "$fail" -eq 0 ] && echo "loop-overlay sentinels cleared at both locations"
+exit "$fail"
+```
+
 31. **Plugin-scope subagent allowlist enforcement**: synthetic plugin-scope subagent invocation with `agent_type: "sibling-scout"` and a denied command (`rm -rf /tmp/foo`) causes `agent-bash-pivot.sh` to exit 2 (or to dispatch into `${CLAUDE_PLUGIN_ROOT}/hooks/sibling-scout-bash.sh` which exits 2). Without this check the C1 path bug is invisible.
 
 31b. **Pivot fails closed on missing dispatch script** (closes review 01 Mo6): rename the deployed `sibling-scout-bash.sh` temporarily; pipe a synthetic JSON `{"agent_type":"sibling-scout","tool_input":{"command":"git log"}}` into `agent-bash-pivot.sh`; assert exit 2 with the "failing closed" diagnostic on stderr. Restore the script. The check regresses if a future contributor switches the missing-dispatch branch back to `exit 0` (fail-open).
@@ -1850,7 +1881,8 @@ exit 0
 #!/usr/bin/env bash
 # 35: cross-section count consistency
 # AGENTIFY check — count drift detector (stub; emits SKIP until tightened).
-AGENTIFY="${CLAUDE_PROJECT_DIR}/AGENTIFY.md"
+CPD="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"  # closes review 05 P3 — defensive CPD consistent with §12.2/§12.5/§12.10/§12.22
+AGENTIFY="$CPD/AGENTIFY.md"
 [ -f "$AGENTIFY" ] || { echo "stub: AGENTIFY.md not found; skipping"; exit 0; }
 # Extract the array literal length: 30 numbered slots + however many sub-checks
 # the `HELPER_SLOTS+=(...)` line appends. Parses the parenthesised list once.
@@ -1967,7 +1999,7 @@ Final message:
 - **Pivot script that fails OPEN on missing dispatch.** §12.21's v6.0 path exited 0 when `${HOOK_DIR}/sibling-scout-bash.sh` was missing or non-executable. Effect: a typo in the install path silently widened every subagent's bash policy to the main session's. A security pivot that fails open is not a security control. Fail closed (exit 2) with a clear diagnostic; pair with §8 #31b regression check that renames the dispatch script and asserts exit 2. Closes review 01 Mo6.
 - **Conventional-commit hook accepting only quoted `-m`/`--message`.** The hook's regex set required quotes, so `git commit -m feat:nope` (no quotes, bash splits on whitespace) and `git commit --message wip:bad` fell through to empty SUBJ and the hook silently ALLOWED them. Add bare-message regexes with a first-char non-quote / non-whitespace constraint AFTER the quoted entries so quoted forms still win on tie. Closes review 01 M2.
 - **`-F`/`--file` opening arbitrary host-side paths.** A `git commit -F /tmp/COMMIT_EDITMSG` invocation reads any file the user can read. Under managed lockdown the hook itself isn't path-gated. Worse, when the path is outside the project the file may not exist by the time the hook runs and SUBJ stays empty → the hook falls through and ALLOWS the commit. Scope `-F`/`--file` paths to `${CLAUDE_PROJECT_DIR}` (allow `.git/` for editor mode), reject otherwise with exit 2. Closes review 01 M3.
-- **CPD scoping invariants: empty `CLAUDE_PROJECT_DIR` and unanchored `*/.git/*`.** When scoping `-F`/`--file` paths to the project root, two side channels: (a) empty `$CLAUDE_PROJECT_DIR` (CI step missed the var; running outside a Claude Code session) — the hook MUST exit 2 with a diagnostic, not fall through to a literal-string compare that allows everything; (b) unanchored `*/.git/*` alternation — a `case "$RESOLVED" in *.git/*)` glob matches `/tmp/evil/.git/COMMIT_EDITMSG` as readily as the project's own `.git/`. Use the anchored `"$CPD"/*` glob (with trailing-slash strip — see review 03 Mo2 + review 04 P2 double-slash extension — so the case-glob never expands to `/path//*` and falsely fails-closed on legitimate `realpath -m`-normalised paths). The §12.4 implementation is the canonical pattern; the forwarding-pointer comment at §12.4 line 2190 resolves here. Closes review 03 M1 + review 04 Mo1 (the iter-04 P1 inline-rationale shrink at §12.4 created the forwarding pointer; this entry creates the target it references).
+- **CPD scoping invariants: empty `CLAUDE_PROJECT_DIR` and unanchored `*/.git/*`.** When scoping `-F`/`--file` paths to the project root, two side channels: (a) empty `$CLAUDE_PROJECT_DIR` (CI step missed the var; running outside a Claude Code session) — the hook MUST exit 2 with a diagnostic, not fall through to a literal-string compare that allows everything; (b) unanchored `*/.git/*` alternation — a `case "$RESOLVED" in *.git/*)` glob matches `/tmp/evil/.git/COMMIT_EDITMSG` as readily as the project's own `.git/`. Use the anchored `"$CPD"/*` glob (with trailing-slash strip — see review 03 Mo2 + review 04 P2 double-slash extension — so the case-glob never expands to `/path//*` and falsely fails-closed on legitimate `realpath -m`-normalised paths). The §12.4 implementation is the canonical pattern; the forwarding-pointer comment at §12.4 — the 5-line block centered on `# rationale at §10 "CPD scoping invariants" anti-pattern.` (grep `^    # rationale at §10` against AGENTIFY.md returns exactly one match — the canonical resolver) — resolves here. The grep-able-anchor form is intentionally more robust against future line drift than any line-number cite: the iter-05 entry mistakenly said "line 2190" (the section-divider comment, not the forwarding pointer); review 05 Mo1 caught the 8-line drift, and this iteration switches the citation form from line-number to grep-anchor so future inserts above §12.4 (like this iteration's M1 expansion of §12.20 driving §10 line-bump) cannot re-introduce the same drift class. Closes review 03 M1 + review 04 Mo1 + review 05 Mo1 (caused_by_prior_revise).
 - **Unbounded Phase 0 sibling-scout parallel fan-out.** A 100-sibling fleet without a cap triggers 100 concurrent Haiku subagents at the ~15× per-token rate (§1 rule 4) and instantly exhausts the daily budget. Hard-cap at N=10 in-flight subagents; batch the candidate list, await each batch before spawning the next. Stays under `context/claude-code-mechanics.md#scheduled-tasks` 50-task-per-session ceiling with safety margin. Closes review 01 Mo7.
 - **Loop overlay sentinel scoped to the worktree instead of the git common-dir.** Worktrees share `.git`; the sentinel at `${CLAUDE_PROJECT_DIR}/.agents-work/.loop-overlay-active` is per-worktree, so peer worktrees spawned during an active loop fire the §5.5 #18 overlay-missing warning at every SessionStart — noise that trains operators to ignore the warning. Write the sentinel to `$(git rev-parse --git-common-dir)/.loop-overlay-active` so worktrees inherit; keep the project-dir fallback for non-git directories. Closes review 01 S3.
 
@@ -2929,9 +2961,14 @@ if [ -f "$PROJECT_DIR/.claude/hooks/session-start-inject.sh" ]; then
               | grep -Eq '(sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|glpat-|xoxb-|AKIA[0-9A-Z]{16}|eyJ[A-Za-z0-9._-]{20,}|[Bb]earer [A-Za-z0-9._-]{16,})'; then
             REDACT_FAIL="redact_json: token-shape survived in fixture output"
           fi
-          # Schema preservation: top-level keys + value types unchanged.
-          ORIG_SHAPE=$(jq -S 'walk(if type == "string" then "S" else . end) | (paths | map(tostring) | join("."))' "$JSON_FIXTURE" | sort)
-          NEW_SHAPE=$(printf '%s' "$JSON_ONCE" | jq -S 'walk(if type == "string" then "S" else . end) | (paths | map(tostring) | join("."))' | sort)
+          # Schema preservation: top-level keys + value types unchanged. Path-join
+          # uses `map(tojson) | join(",")` (not `map(tostring) | join(".")`) so
+          # numeric array indices (`0`) and string-numeric keys (`"0"`) serialize
+          # distinguishably — under tojson, `0 → 0` and `"0" → "\"0\""`. Closes
+          # review 05 P2 (the `tostring`/`.` separator collided when a future
+          # fixture would have `{"0": ...}` adjacent to an array index 0).
+          ORIG_SHAPE=$(jq -S 'walk(if type == "string" then "S" else . end) | (paths | map(tojson) | join(","))' "$JSON_FIXTURE" | sort)
+          NEW_SHAPE=$(printf '%s' "$JSON_ONCE" | jq -S 'walk(if type == "string" then "S" else . end) | (paths | map(tojson) | join(","))' | sort)
           if [ "$ORIG_SHAPE" != "$NEW_SHAPE" ]; then
             REDACT_FAIL="redact_json: schema mutated (path-set diverged from input)"
           fi
@@ -3381,16 +3418,27 @@ case "$mode" in
     echo "merge-and-revert: overlay applied to $LOCAL; backup at $BACKUP"
     ;;
   revert)
+    # Remove the loop-overlay sentinels at BOTH locations (closes review 01 S3
+    # + review 05 M1 cross-section drift). §6.5 / §5.1 / §5.9 / §6.4 prose all
+    # claim revert mode resolves sentinel removal via git-common-dir; without
+    # this block, the git-common-dir sentinel persists across stops and §5.5 #18
+    # silently passes on subsequent sessions that don't have the overlay loaded.
+    # Defensive PROJECT_DIR resolution mirrors §12.2/§12.5/§12.10/§12.22 so a
+    # CI replay outside a Claude Code session still cleans correctly.
+    PROJECT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+    GIT_COMMON="$(git -C "$PROJECT_DIR" rev-parse --git-common-dir 2>/dev/null || true)"
+    rm -f "$PROJECT_DIR/.agents-work/.loop-overlay-active"
+    [ -n "$GIT_COMMON" ] && rm -f "$GIT_COMMON/.loop-overlay-active"
     if [ -f "$ABSENT_MARKER" ]; then
       # Apply was made over an absent file; restore the clean "no local settings" state.
       rm -f "$LOCAL" "$BACKUP" "$ABSENT_MARKER"
-      echo "merge-and-revert: removed $LOCAL (no original existed)"
+      echo "merge-and-revert: removed $LOCAL (no original existed); cleared loop-overlay sentinels"
     elif [ -f "$BACKUP" ]; then
       mv "$BACKUP" "$LOCAL"
-      echo "merge-and-revert: reverted $LOCAL"
+      echo "merge-and-revert: reverted $LOCAL; cleared loop-overlay sentinels"
     else
       rm -f "$LOCAL"
-      echo "merge-and-revert: no backup; removed $LOCAL"
+      echo "merge-and-revert: no backup; removed $LOCAL; cleared loop-overlay sentinels"
     fi
     ;;
   *)
