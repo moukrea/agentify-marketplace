@@ -1,22 +1,22 @@
 {
-  "generated_at": "2026-05-15T08:51:47Z",
-  "total": 14,
+  "generated_at": "2026-05-17T21:01:39Z",
+  "total": 23,
   "by_severity": {
     "critical": 1,
-    "info": 5,
-    "major": 2,
-    "moderate": 5,
-    "polish": 1
+    "info": 8,
+    "major": 3,
+    "moderate": 9,
+    "polish": 2
   },
   "by_category": {
     "bug": 1,
     "ci-broken": 2,
-    "doc-gap": 1,
+    "doc-gap": 3,
     "feedback-recurring": 1,
     "manifest-drift": 1,
-    "meta": 5,
-    "practice-drift": 3
+    "meta": 9,
+    "practice-drift": 6
   },
   "recurring": [],
-  "open_synthetic_findings": 14
+  "open_synthetic_findings": 23
 }
